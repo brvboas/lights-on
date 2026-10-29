@@ -9,7 +9,7 @@
 - **Photometric Lighting Controls**:
   - **Color Temperature (`2000K` – `7000K`)**: Continuous slider based on Tanner Helland's blackbody radiation algorithm, plus instant presets for **Warm White (`2700K`)**, **Neutral White (`4000K`)**, and **Cool White (`6500K`)**.
   - **Synchronized LED Watts & Lumens**: Coupled sliders (`95 lm/W` residential LED efficacy) with commercial bulb presets (`5W`, `9W`, `12W`, `18W`, `24W`, `36W`).
-  - **Real-Time Illuminance Telemetry (`Lux`)**: Live calculation of total room area (`m²`), active luminous flux (`lm`), power consumption (`W`), and estimated average illuminance (`Lux` = total lumens ÷ floor area, a simplified estimate without utilization or maintenance factors).
+  - **Real-Time Illuminance Telemetry (`Lux`)**: Live calculation of total room area (`m²`), active luminous flux (`lm`), power consumption (`W`), and estimated average illuminance (`Lux`) on the work plane using the **lumen method** (`lux = lumens × CU × MF ÷ area`, with the utilization factor CU from the room index K and the wall paint's reflectance, and MF = 0.8 — see `src/utils/illuminance.js`). Each room type (living room, bedroom, kitchen…) shows its recommended lux range (ANSI/IES RP-11, ABNT NBR ISO/CIE 8995-1, former NBR 5413).
 - **Interactive 3D Fixtures & Drag-and-Drop**:
   - **4 Fixture Models**: Pendant (`pendant`), Flush Mount Ceiling (`plafon`), Recessed Spot (`spot`), and Floor Lamp (`floor_lamp`).
   - **Scalable Dimensions**: Resize individual fixtures from `50%` to `240%`.

@@ -1,5 +1,6 @@
 /**
  * Room-by-room lighting data and copy for the static SEO pages.
+ * The lux values live in src/utils/illuminance.js (ROOM_LUX), shared with the 3D simulator.
  *
  * Lux ranges are typical comfort recommendations for homes, based on the former Brazilian
  * NBR 5413 (which had residential values), ISO 8995-1 / EN 12464-1 (offices, circulation
@@ -13,12 +14,12 @@
  *   size    – typical room (width × length, m) used in the quick answer
  *   areas   – floor areas listed in the size table (m²)
  */
+import { ROOM_LUX } from '../../src/utils/illuminance.js';
+
 export const ROOMS = [
   {
     id: 'living',
-    lux: [100, 200],
-    target: 150,
-    task: [300, 500],
+    ...ROOM_LUX.living,
     kelvin: [2700, 3000],
     size: [4, 3.5],
     areas: [9, 12, 16, 20, 25, 30],
@@ -82,9 +83,7 @@ export const ROOMS = [
   },
   {
     id: 'bedroom',
-    lux: [100, 150],
-    target: 120,
-    task: [300, 500],
+    ...ROOM_LUX.bedroom,
     kelvin: [2700, 3000],
     size: [3.5, 3],
     areas: [8, 10, 12, 15, 20],
@@ -148,9 +147,7 @@ export const ROOMS = [
   },
   {
     id: 'kitchen',
-    lux: [200, 300],
-    target: 250,
-    task: [300, 500],
+    ...ROOM_LUX.kitchen,
     kelvin: [3000, 4000],
     size: [3, 3],
     areas: [6, 9, 12, 15, 20],
@@ -214,9 +211,7 @@ export const ROOMS = [
   },
   {
     id: 'bathroom',
-    lux: [150, 250],
-    target: 200,
-    task: [300, 500],
+    ...ROOM_LUX.bathroom,
     kelvin: [3000, 4000],
     size: [2.5, 2],
     areas: [3, 4, 5, 6, 8],
@@ -280,9 +275,7 @@ export const ROOMS = [
   },
   {
     id: 'office',
-    lux: [300, 500],
-    target: 300,
-    task: [500, 500],
+    ...ROOM_LUX.office,
     kelvin: [4000, 4000],
     size: [3, 3],
     areas: [6, 9, 12, 15],
@@ -346,9 +339,7 @@ export const ROOMS = [
   },
   {
     id: 'dining',
-    lux: [100, 200],
-    target: 150,
-    task: [200, 300],
+    ...ROOM_LUX.dining,
     kelvin: [2700, 3000],
     size: [3.5, 3],
     areas: [8, 10, 12, 16, 20],
@@ -412,9 +403,7 @@ export const ROOMS = [
   },
   {
     id: 'hallway',
-    lux: [75, 150],
-    target: 100,
-    task: [100, 150],
+    ...ROOM_LUX.hallway,
     kelvin: [2700, 3000],
     size: [4, 1.2],
     areas: [3, 5, 8, 10],
@@ -478,9 +467,7 @@ export const ROOMS = [
   },
   {
     id: 'laundry',
-    lux: [200, 300],
-    target: 250,
-    task: [300, 500],
+    ...ROOM_LUX.laundry,
     kelvin: [4000, 5000],
     size: [2.5, 2],
     areas: [3, 4, 5, 6, 8],

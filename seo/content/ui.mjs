@@ -47,15 +47,16 @@ export const UI = {
     tipsTitle: 'Dicas para iluminar',
     howTitle: 'Como a conta é feita',
     how: (ex) => `
-      <p>A iluminância média (lux) é a luz que chega ao piso, por metro quadrado. Nem toda a luz que a lâmpada emite chega lá: parte é absorvida pelas paredes e pelo teto, e a lâmpada perde rendimento com o tempo. Por isso a conta usa dois fatores:</p>
-      <p class="formula">lúmens = lux × área ÷ (aproveitamento × manutenção)</p>
+      <p>A iluminância média (lux) é a luz que chega ao plano de trabalho (a altura de uma mesa, 0,75 m), por metro quadrado. Nem toda a luz que a lâmpada emite chega lá: parte é absorvida pelas paredes e pelo teto, e o LED perde rendimento com o tempo. A conta segue o <strong>método dos lúmens</strong>, o cálculo padrão da luminotécnica:</p>
+      <p class="formula">lúmens = lux × área ÷ (CU × FM)</p>
       <ul>
-        <li><strong>Aproveitamento</strong>: quanto da luz chega ao piso. Usamos 0,6 para paredes claras, 0,5 para médias e 0,4 para escuras (um pouco menos com pé-direito acima de 3 m).</li>
-        <li><strong>Manutenção</strong>: 0,8, para compensar a perda de brilho do LED e a poeira.</li>
+        <li><strong>Índice do recinto (K)</strong>: descreve o formato do cômodo. K = C × L ÷ [h × (C + L)], com h = pé-direito − 0,75 m. Cômodos pequenos ou com pé-direito alto têm K baixo: mais luz bate nas paredes antes de chegar à mesa.</li>
+        <li><strong>Fator de utilização (CU)</strong>: quanto da luz chega ao plano de trabalho. Vem de uma tabela que cruza K com a refletância das paredes (claras ≈ 50%, médias ≈ 30%, escuras ≈ 10%), para luminária difusa de teto e teto branco.</li>
+        <li><strong>Fator de manutenção (FM)</strong>: 0,8, para compensar a perda de brilho do LED e a poeira.</li>
       </ul>
       <p>Exemplo: ${ex}</p>
-      <p>O simulador 3D mostra a conta simples (lúmens ÷ área, sem as perdas), por isso o lux dele aparece maior que o desta página para as mesmas lâmpadas. Use o simulador para comparar posições e cores de luz, e esta página para escolher quantos lúmens comprar.</p>`,
-    howExample: (r) => `${r.lux} lux × ${r.area} m² ÷ (0,6 × 0,8) = <strong>${r.lm} lúmens</strong>. Dividindo por 95 lm/W, dá cerca de ${r.watts} W de LED.`,
+      <p>O simulador 3D usa a mesma conta, com as medidas e a cor de parede que você escolher.</p>`,
+    howExample: (r) => `num cômodo de ${r.w} × ${r.d} m com pé-direito de ${r.h} m (h = ${r.hu} m), K ≈ ${r.k} e, com paredes claras, CU ≈ ${r.uf}. Para ${r.lux} lux: ${r.lux} × ${r.area} m² ÷ (${r.uf} × ${r.mf}) ≈ <strong>${r.lm} lúmens</strong>. Dividindo por 95 lm/W, dá cerca de ${r.watts} W de LED.`,
     careTitle: 'Leia antes de comprar',
     care: `
       <p>Estes números são uma <strong>estimativa para planejar e comparar</strong>, não um projeto luminotécnico. A conta considera a cor das paredes, a perda de luz com o tempo e uma eficiência média de LED (95 lm/W), mas não sabe qual luminária você vai usar, o ângulo do facho nem onde estão os móveis.</p>
@@ -66,7 +67,7 @@ export const UI = {
         <li>Para obra, reforma grande ou espaço comercial, consulte um lighting designer, arquiteto ou engenheiro eletricista.</li>
       </ul>`,
     sourcesTitle: 'De onde vêm os valores',
-    sources: 'As faixas são referências de conforto para residências, baseadas na antiga NBR 5413 (que trazia valores para casas), na NBR ISO/CIE 8995-1 (escritórios e áreas de circulação) e nas recomendações residenciais da IES (Illuminating Engineering Society). Normas de iluminação de trabalho não regulam residências; use os valores como ponto de partida.',
+    sources: 'O cálculo segue o método dos lúmens do IES Lighting Handbook (Illuminating Engineering Society) e da publicação CIE 52, sobre fatores de utilização. As faixas de lux são referências de conforto para residências, baseadas na ANSI/IES RP-11 (iluminação residencial), na ABNT NBR ISO/CIE 8995-1 e nos valores residenciais da antiga NBR 5413, que ela substituiu. Normas de iluminação de trabalho não regulam residências; use os valores como ponto de partida.',
     faqTitle: 'Perguntas frequentes',
     faqWatts: (r) => [`Quantos watts de LED para ${r.article} de ${r.area} m²?`, `Cerca de ${r.watts} W de LED, somando todas as lâmpadas, para ${r.lm} lúmens (${r.lux} lux com paredes claras). Como a eficiência varia entre marcas, confira os lúmens na embalagem: são eles que dizem quanta luz a lâmpada dá.`],
     faqKelvin: (r) => [`Qual temperatura de cor usar ${r.inRoom}?`, `${r.kelvinText} Para comparar na prática, o simulador 3D deixa você trocar a temperatura de cada lâmpada e ver o efeito no cômodo.`],
@@ -133,15 +134,16 @@ export const UI = {
     tipsTitle: 'Lighting tips',
     howTitle: 'How the math works',
     how: (ex) => `
-      <p>Average illuminance (lux) is the light that reaches the floor, per square meter. Not all the light a bulb emits gets there: walls and ceiling absorb part of it, and bulbs lose output over time. That is why the formula uses two factors:</p>
-      <p class="formula">lumens = lux × area ÷ (utilization × maintenance)</p>
+      <p>Average illuminance (lux) is the light that reaches the work plane (table height, 0.75 m / 30 in), per square meter. Not all the light a bulb emits gets there: walls and ceiling absorb part of it, and LEDs lose output over time. The math follows the <strong>lumen method</strong>, the standard lighting design calculation:</p>
+      <p class="formula">lumens = lux × area ÷ (CU × MF)</p>
       <ul>
-        <li><strong>Utilization</strong>: how much of the light reaches the floor. We use 0.6 for light walls, 0.5 for mid-tone and 0.4 for dark walls (a bit less for ceilings above 3 m / 10 ft).</li>
-        <li><strong>Maintenance</strong>: 0.8, to account for LED depreciation and dust.</li>
+        <li><strong>Room index (K)</strong>: describes the room's shape. K = L × W ÷ [h × (L + W)], where h = ceiling height − 0.75 m. Small rooms and tall ceilings have a low K: more light hits the walls before reaching the table.</li>
+        <li><strong>Coefficient of utilization (CU)</strong>: how much of the light reaches the work plane. It comes from a table that crosses K with wall reflectance (light ≈ 50%, mid-tone ≈ 30%, dark ≈ 10%), for a diffuse ceiling fixture and a white ceiling.</li>
+        <li><strong>Maintenance factor (MF)</strong>: 0.8, to account for LED depreciation and dust.</li>
       </ul>
       <p>Example: ${ex}</p>
-      <p>The 3D simulator shows the simple figure (lumens ÷ area, without losses), so its lux reads higher than this page for the same bulbs. Use the simulator to compare positions and light colors, and this page to decide how many lumens to buy.</p>`,
-    howExample: (r) => `${r.lux} lux × ${r.area} m² ÷ (0.6 × 0.8) = <strong>${r.lm} lumens</strong>. Divided by 95 lm/W, that is about ${r.watts} W of LED.`,
+      <p>The 3D simulator uses the same math, with the size and wall color you pick.</p>`,
+    howExample: (r) => `in a ${r.w} × ${r.d} m room with a ${r.h} m ceiling (h = ${r.hu} m), K ≈ ${r.k} and, with light walls, CU ≈ ${r.uf}. For ${r.lux} lux: ${r.lux} × ${r.area} m² ÷ (${r.uf} × ${r.mf}) ≈ <strong>${r.lm} lumens</strong>. Divided by 95 lm/W, that is about ${r.watts} W of LED.`,
     careTitle: 'Read this before you buy',
     care: `
       <p>These numbers are an <strong>estimate for planning and comparing</strong>, not a lighting design. The math accounts for wall color, light loss over time and an average LED efficacy (95 lm/W), but it does not know which fixture you will use, its beam angle or where the furniture is.</p>
@@ -152,7 +154,7 @@ export const UI = {
         <li>For construction, major renovations or commercial spaces, talk to a lighting designer, architect or electrician.</li>
       </ul>`,
     sourcesTitle: 'Where the values come from',
-    sources: 'The ranges are comfort references for homes, based on IES (Illuminating Engineering Society) residential recommendations, ISO 8995-1 / EN 12464-1 (offices and circulation areas) and the former Brazilian standard NBR 5413, which included residential values. Workplace lighting standards do not regulate homes; treat the values as a starting point.',
+    sources: 'The math follows the lumen method in the IES Lighting Handbook (Illuminating Engineering Society) and CIE 52 on utilization factors. The lux ranges are comfort references for homes, based on ANSI/IES RP-11 (residential lighting), ISO/CIE 8995-1 / EN 12464-1 and the residential values of the former Brazilian standard NBR 5413. Workplace lighting standards do not regulate homes; treat the values as a starting point.',
     faqTitle: 'Frequently asked questions',
     faqWatts: (r) => [`How many LED watts for ${r.article} of ${r.area} m² (${r.sqft} sq ft)?`, `About ${r.watts} W of LED across all bulbs, for ${r.lm} lumens (${r.lux} lux with light walls). Efficacy varies between brands, so check the lumens on the box: that is what tells you how much light the bulb gives.`],
     faqKelvin: (r) => [`What color temperature for ${r.inRoom}?`, `${r.kelvinText} To compare in practice, the 3D simulator lets you change each bulb’s color temperature and see the effect in the room.`],
@@ -219,15 +221,16 @@ export const UI = {
     tipsTitle: 'Consejos de iluminación',
     howTitle: 'Cómo se hace el cálculo',
     how: (ex) => `
-      <p>La iluminancia media (lux) es la luz que llega al suelo, por metro cuadrado. No toda la luz que emite la bombilla llega: paredes y techo absorben una parte, y la bombilla pierde rendimiento con el tiempo. Por eso el cálculo usa dos factores:</p>
-      <p class="formula">lúmenes = lux × superficie ÷ (aprovechamiento × mantenimiento)</p>
+      <p>La iluminancia media (lux) es la luz que llega al plano de trabajo (la altura de una mesa, 0,75 m), por metro cuadrado. No toda la luz que emite la bombilla llega: paredes y techo absorben una parte, y el LED pierde rendimiento con el tiempo. El cálculo sigue el <strong>método de los lúmenes</strong>, el cálculo estándar de luminotecnia:</p>
+      <p class="formula">lúmenes = lux × superficie ÷ (CU × FM)</p>
       <ul>
-        <li><strong>Aprovechamiento</strong>: cuánta luz llega al suelo. Usamos 0,6 para paredes claras, 0,5 para medias y 0,4 para oscuras (algo menos con techos de más de 3 m).</li>
-        <li><strong>Mantenimiento</strong>: 0,8, para compensar la pérdida de brillo del LED y el polvo.</li>
+        <li><strong>Índice del local (K)</strong>: describe la forma de la habitación. K = L × A ÷ [h × (L + A)], con h = altura del techo − 0,75 m. Las habitaciones pequeñas o con techos altos tienen un K bajo: más luz choca con las paredes antes de llegar a la mesa.</li>
+        <li><strong>Factor de utilización (CU)</strong>: cuánta luz llega al plano de trabajo. Sale de una tabla que cruza K con la reflectancia de las paredes (claras ≈ 50 %, medias ≈ 30 %, oscuras ≈ 10 %), para una luminaria difusa de techo y techo blanco.</li>
+        <li><strong>Factor de mantenimiento (FM)</strong>: 0,8, para compensar la pérdida de brillo del LED y el polvo.</li>
       </ul>
       <p>Ejemplo: ${ex}</p>
-      <p>El simulador 3D muestra el cálculo simple (lúmenes ÷ superficie, sin pérdidas), por eso sus lux aparecen más altos que los de esta página con las mismas bombillas. Usa el simulador para comparar posiciones y colores de luz, y esta página para decidir cuántos lúmenes comprar.</p>`,
-    howExample: (r) => `${r.lux} lux × ${r.area} m² ÷ (0,6 × 0,8) = <strong>${r.lm} lúmenes</strong>. Dividido entre 95 lm/W, son unos ${r.watts} W de LED.`,
+      <p>El simulador 3D usa el mismo cálculo, con las medidas y el color de pared que elijas.</p>`,
+    howExample: (r) => `en una habitación de ${r.w} × ${r.d} m con techo de ${r.h} m (h = ${r.hu} m), K ≈ ${r.k} y, con paredes claras, CU ≈ ${r.uf}. Para ${r.lux} lux: ${r.lux} × ${r.area} m² ÷ (${r.uf} × ${r.mf}) ≈ <strong>${r.lm} lúmenes</strong>. Dividido entre 95 lm/W, son unos ${r.watts} W de LED.`,
     careTitle: 'Lee esto antes de comprar',
     care: `
       <p>Estas cifras son una <strong>estimación para planificar y comparar</strong>, no un proyecto de iluminación. El cálculo tiene en cuenta el color de las paredes, la pérdida de luz con el tiempo y una eficiencia media de LED (95 lm/W), pero no sabe qué luminaria vas a usar, su ángulo de apertura ni dónde están los muebles.</p>
@@ -238,7 +241,7 @@ export const UI = {
         <li>Para obra, reformas grandes o locales comerciales, consulta a un diseñador de iluminación, arquitecto o electricista.</li>
       </ul>`,
     sourcesTitle: 'De dónde salen los valores',
-    sources: 'Los rangos son referencias de confort para viviendas, basadas en las recomendaciones residenciales de la IES (Illuminating Engineering Society), la ISO 8995-1 / UNE-EN 12464-1 (oficinas y zonas de paso) y la antigua norma brasileña NBR 5413, que incluía valores para viviendas. Las normas de iluminación de lugares de trabajo no regulan las viviendas; usa los valores como punto de partida.',
+    sources: 'El cálculo sigue el método de los lúmenes del IES Lighting Handbook (Illuminating Engineering Society) y la publicación CIE 52 sobre factores de utilización. Los rangos de lux son referencias de confort para viviendas, basadas en la ANSI/IES RP-11 (iluminación residencial), la ISO/CIE 8995-1 / UNE-EN 12464-1 y los valores residenciales de la antigua norma brasileña NBR 5413. Las normas de iluminación de lugares de trabajo no regulan las viviendas; usa los valores como punto de partida.',
     faqTitle: 'Preguntas frecuentes',
     faqWatts: (r) => [`¿Cuántos vatios LED para ${r.article} de ${r.area} m²?`, `Unos ${r.watts} W de LED sumando todas las bombillas, para ${r.lm} lúmenes (${r.lux} lux con paredes claras). Como la eficiencia varía entre marcas, mira los lúmenes de la caja: son los que dicen cuánta luz da la bombilla.`],
     faqKelvin: (r) => [`¿Qué temperatura de color usar ${r.inRoom}?`, `${r.kelvinText} Para compararlo en la práctica, el simulador 3D te deja cambiar la temperatura de cada bombilla y ver el efecto en la habitación.`],

@@ -1,3 +1,5 @@
+import { LED_LM_PER_W, reflectanceFromHex } from './illuminance';
+
 /**
  * Approximates correlated color temperature (Kelvin) to an RGB hex string
  * using Tanner Helland's blackbody radiation algorithm.
@@ -44,7 +46,7 @@ export function kelvinToHex(kelvin) {
 }
 
 // Average luminous efficacy of a residential LED bulb (~95 lm/W)
-export const LED_LUMENS_PER_WATT = 95;
+export const LED_LUMENS_PER_WATT = LED_LM_PER_W;
 
 export function wattsToLumens(watts) {
   return Math.round(watts * LED_LUMENS_PER_WATT);
@@ -140,6 +142,7 @@ export const SCENE_PRESETS = {
       depth: 4.5,
       height: 2.8,
       shape: 'rectangular',
+      roomType: 'living',
       floorMaterialId: 'wood_warm',
       wallColorId: 'sand',
       showCeiling: false,
@@ -214,6 +217,7 @@ export const SCENE_PRESETS = {
       depth: 4.2,
       height: 2.7,
       shape: 'l-shape',
+      roomType: 'office',
       floorMaterialId: 'porcelain_gray',
       wallColorId: 'off_white',
       showCeiling: false,
@@ -278,6 +282,7 @@ export const SCENE_PRESETS = {
       depth: 4.6,
       height: 2.75,
       shape: 'octagonal',
+      roomType: 'bedroom',
       floorMaterialId: 'wood_dark',
       wallColorId: 'sage',
       showCeiling: false,
@@ -337,8 +342,12 @@ export const SCENE_PRESETS = {
   },
 };
 
+/** Room types offered in the simulator (lux targets live in illuminance.js → ROOM_LUX). */
+export const ROOM_TYPES = ['living', 'bedroom', 'kitchen', 'bathroom', 'office', 'dining', 'hallway', 'laundry'];
+
 /**
- * Calculates usable floor area in square meters based on room geometry.
+ * Calculates usable floor area in square meters based on room geometry
+ * (same outlines as RoomMesh: L-shape drops one quadrant, octagon cuts 25% × 25% corners).
  */
 export function calculateRoomArea(room) {
   const fullArea = room.width * room.depth;
@@ -346,7 +355,69 @@ export function calculateRoomArea(room) {
     return Number((fullArea * 0.75).toFixed(1));
   }
   if (room.shape === 'octagonal') {
-    return Number((fullArea * 0.82).toFixed(1));
+    return Number((fullArea * 0.875).toFixed(1));
   }
   return Number(fullArea.toFixed(1));
+}
+
+/** Floor perimeter in meters (the L-shape keeps the rectangle's perimeter). */
+export function calculateRoomPerimeter(room) {
+  const { width: w, depth: d } = room;
+  if (room.shape === 'octagonal') {
+    return w + d + Math.hypot(w, d);
+  }
+  return 2 * (w + d);
+}
+
+/** Geometry for the lumen method (area, perimeter, ceiling height). */
+export function roomGeometry(room) {
+  return {
+    area: calculateRoomArea(room),
+    perimeter: calculateRoomPerimeter(room),
+    height: room.height,
+  };
+}
+
+/**
+ * 3D render calibration. Lights use physical units scaled by RENDER_SCALE, so that what you
+ * see follows the lux figure: a room near 150–300 lux looks normally lit on screen and a
+ * room at 30 lux looks dim. Lamps: candela = lumens ÷ 4π (inverse-square falloff).
+ */
+export const RENDER_SCALE = 0.025;
+
+/**
+ * Share of the inter-reflected light used as the (shadowless) ambient light. The full
+ * integrating-sphere value washes out every shadow, because three.js ambient light reaches
+ * all surfaces equally, even under furniture.
+ */
+export const INDIRECT_AMBIENT_SHARE = 0.35;
+
+/** Base ambient (lux) per unit of the day/night toggle, so the room never goes pitch black. */
+export const BASE_AMBIENT_LUX = 40;
+
+const CEILING_REFLECTANCE = 0.7;
+
+/**
+ * Inter-reflected (indirect) illuminance, lux, from the integrating-sphere approximation:
+ * E = Φ × ρ̄ ÷ [S × (1 − ρ̄)], S = total surface (floor + ceiling + walls), ρ̄ = mean reflectance.
+ * Used only for the 3D ambient light; the lux readout comes from the lumen method.
+ */
+export function indirectLux(totalLumens, room) {
+  if (totalLumens <= 0) return 0;
+  const area = calculateRoomArea(room);
+  const wallArea = calculateRoomPerimeter(room) * room.height;
+  const floor = FLOOR_MATERIALS.find((f) => f.id === room.floorMaterialId) || FLOOR_MATERIALS[0];
+  const rhoFloor = reflectanceFromHex(floor.color);
+  const surface = 2 * area + wallArea;
+  const rho = Math.min(
+    0.85,
+    (area * CEILING_REFLECTANCE + area * rhoFloor + wallArea * wallReflectance(room)) / surface
+  );
+  return (totalLumens * rho) / (surface * (1 - rho));
+}
+
+/** Approximate light reflectance of the selected wall paint (0–1). */
+export function wallReflectance(room) {
+  const wall = WALL_COLORS.find((w) => w.id === room.wallColorId) || WALL_COLORS[0];
+  return reflectanceFromHex(wall.color);
 }

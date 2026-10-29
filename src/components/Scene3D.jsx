@@ -1,10 +1,16 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import RoomMesh from './RoomMesh';
 import Lamp3D from './Lamp3D';
 import Furniture3D from './Furniture3D';
+import {
+  RENDER_SCALE,
+  BASE_AMBIENT_LUX,
+  INDIRECT_AMBIENT_SHARE,
+  indirectLux,
+} from '../utils/lightingPhysics';
 
 function CameraController({ cameraView, room, orbitEnabled }) {
   const { camera } = useThree();
@@ -60,6 +66,13 @@ export default function Scene3D({
 }) {
   const [orbitEnabled, setOrbitEnabled] = useState(true);
 
+  // Ambient = light bouncing off walls/ceiling (grows with the lamps' lumens) + a small
+  // day/night base, so dim rooms look dim and bright rooms look bright.
+  const ambientLux = useMemo(() => {
+    const lumens = lamps.reduce((acc, l) => acc + (l.isOn ? l.lumens : 0), 0);
+    return indirectLux(lumens, room) * INDIRECT_AMBIENT_SHARE + ambientLevel * BASE_AMBIENT_LUX;
+  }, [lamps, room, ambientLevel]);
+
   return (
     <div className="w-full h-full relative">
       <Canvas
@@ -77,11 +90,11 @@ export default function Scene3D({
         <color attach="background" args={['#090d16']} />
 
         {/* Subtle ambient & hemisphere light so the room isn't pitch-black when lamps are off */}
-        <ambientLight intensity={ambientLevel} color="#cbd5e1" />
+        <ambientLight intensity={ambientLux * RENDER_SCALE * 0.6} color="#cbd5e1" />
         <hemisphereLight
           skyColor="#94a3b8"
           groundColor="#1e293b"
-          intensity={ambientLevel * 0.7}
+          intensity={ambientLux * RENDER_SCALE * 0.4}
         />
 
         <CameraController

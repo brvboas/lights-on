@@ -7,7 +7,7 @@ export const HUB = {
     intro: 'Informe as medidas do cômodo e a cor das paredes para saber quantos lúmens e quantos watts de LED usar. Abaixo da calculadora estão os valores de lux recomendados para cada ambiente da casa.',
     faq: [
       ['Qual a diferença entre lux e lúmen?', 'Lúmen (lm) é a quantidade de luz que a lâmpada emite. Lux (lx) é quanta luz chega a cada metro quadrado do ambiente: 1 lux = 1 lúmen por m². A mesma lâmpada de 1.000 lúmens dá muito mais lux num banheiro de 4 m² do que numa sala de 20 m².'],
-      ['Quantos lúmens por metro quadrado?', 'Depende do cômodo: de cerca de 200 lm/m² em corredores e quartos até 600 lm/m² ou mais em home office, já considerando as perdas. Multiplique a área pelo lux desejado e divida por cerca de 0,48 (paredes claras).'],
+      ['Quantos lúmens por metro quadrado?', 'Depende do cômodo: de cerca de 300 lm/m² em corredores e quartos até 900 lm/m² ou mais em home office, já considerando as perdas. Multiplique a área pelo lux desejado e divida por cerca de 0,34 (cômodo de uns 12 m², paredes claras); em cômodos menores ou com paredes escuras, o divisor é menor e você precisa de mais lúmens.'],
       ['Como converter watts em lúmens?', 'Em LED comum, multiplique os watts por cerca de 95: uma lâmpada de 9 W dá uns 850 lúmens. Como a eficiência varia de marca para marca, o valor confiável é o que vem na embalagem.'],
     ],
   },
@@ -18,7 +18,7 @@ export const HUB = {
     intro: 'Enter your room’s size and wall color to see how many lumens and LED watts to use. Below the calculator you will find the recommended lux for every room in the house.',
     faq: [
       ['What is the difference between lux and lumens?', 'Lumens (lm) measure how much light a bulb emits. Lux (lx) measures how much light lands on each square meter: 1 lux = 1 lumen per m². The same 1,000-lumen bulb gives far more lux in a 4 m² bathroom than in a 20 m² living room.'],
-      ['How many lumens per square meter?', 'It depends on the room: from about 200 lm/m² in hallways and bedrooms to 600 lm/m² or more in a home office, losses included. Multiply the area by the target lux and divide by about 0.48 (light walls). Per square foot, divide those numbers by 10.8.'],
+      ['How many lumens per square meter?', 'It depends on the room: from about 300 lm/m² in hallways and bedrooms to 900 lm/m² or more in a home office, losses included. Multiply the area by the target lux and divide by about 0.34 (a room of about 12 m² / 130 sq ft with light walls); smaller rooms and dark walls need a smaller divisor, so more lumens. Per square foot, divide those numbers by 10.8.'],
       ['How do I convert watts to lumens?', 'For a regular LED bulb, multiply the watts by about 95: a 9 W bulb gives around 850 lumens. Efficacy varies between brands, so the reliable number is the one printed on the box.'],
     ],
   },
@@ -29,7 +29,7 @@ export const HUB = {
     intro: 'Indica las medidas de la habitación y el color de las paredes para saber cuántos lúmenes y vatios LED usar. Debajo de la calculadora están los lux recomendados para cada estancia de la casa.',
     faq: [
       ['¿Cuál es la diferencia entre lux y lúmenes?', 'El lumen (lm) mide cuánta luz emite la bombilla. El lux (lx) mide cuánta luz llega a cada metro cuadrado: 1 lux = 1 lumen por m². La misma bombilla de 1.000 lúmenes da muchos más lux en un baño de 4 m² que en una sala de 20 m².'],
-      ['¿Cuántos lúmenes por metro cuadrado?', 'Depende de la habitación: desde unos 200 lm/m² en pasillos y dormitorios hasta 600 lm/m² o más en una oficina en casa, con las pérdidas incluidas. Multiplica la superficie por los lux deseados y divide entre 0,48 (paredes claras).'],
+      ['¿Cuántos lúmenes por metro cuadrado?', 'Depende de la habitación: desde unos 300 lm/m² en pasillos y dormitorios hasta 900 lm/m² o más en una oficina en casa, con las pérdidas incluidas. Multiplica la superficie por los lux deseados y divide entre 0,34 (habitación de unos 12 m², paredes claras); en habitaciones más pequeñas o con paredes oscuras el divisor es menor y necesitas más lúmenes.'],
       ['¿Cómo convertir vatios en lúmenes?', 'En un LED común, multiplica los vatios por unos 95: una bombilla de 9 W da unos 850 lúmenes. Como la eficiencia varía entre marcas, el dato fiable es el que viene en la caja.'],
     ],
   },
@@ -185,8 +185,8 @@ export const GUIDES = [
         </table>
         <p>A última coluna mostra quantos m² cada lâmpada sozinha deixaria com 150 lux, o nível de uma sala de estar, já com as perdas. Para outros cômodos, use a <a href="{{HUB_URL}}">calculadora</a>.</p>
         <h2 id="de-lumens-para-lux">De lúmens para lux</h2>
-        <p class="formula">lux ≈ lúmens × 0,48 ÷ área (paredes claras)</p>
-        <p>O 0,48 representa a luz que se perde nas paredes e com o tempo (0,6 × 0,8). Com paredes escuras ele cai para cerca de 0,32. Por isso duas salas do mesmo tamanho, com as mesmas lâmpadas, podem parecer bem diferentes.</p>`,
+        <p class="formula">lux ≈ lúmens × CU × 0,8 ÷ área</p>
+        <p>É o método dos lúmens. O CU (fator de utilização) é a parte da luz que chega à altura de uma mesa; o 0,8 compensa a perda de brilho do LED e a poeira. Num cômodo de 4 × 3 m com pé-direito de 2,7 m e paredes claras, o CU fica perto de 0,42, então chegam cerca de 0,34 dos lúmens; com paredes escuras, cerca de 0,25. Por isso duas salas do mesmo tamanho, com as mesmas lâmpadas, podem parecer bem diferentes.</p>`,
       en: `
         <p>A bulb box shows lots of numbers, but only three matter to know whether your room will be well lit:</p>
         <ul>
@@ -214,8 +214,8 @@ export const GUIDES = [
         </table>
         <p>The last column shows how many m² each bulb alone would bring to 150 lux, a living-room level, losses included. For other rooms, use the <a href="{{HUB_URL}}">calculator</a>.</p>
         <h2 id="lumens-to-lux">From lumens to lux</h2>
-        <p class="formula">lux ≈ lumens × 0.48 ÷ area (light walls)</p>
-        <p>The 0.48 stands for the light lost on walls and over time (0.6 × 0.8). With dark walls it drops to about 0.32. That is why two rooms of the same size with the same bulbs can look very different.</p>`,
+        <p class="formula">lux ≈ lumens × CU × 0.8 ÷ area</p>
+        <p>This is the lumen method. CU (coefficient of utilization) is the share of the light that reaches table height; the 0.8 covers LED depreciation and dust. In a 4 × 3 m (13 × 10 ft) room with a 2.7 m (9 ft) ceiling and light walls, CU is about 0.42, so roughly 0.34 of the lumens arrive; with dark walls, about 0.25. That is why two rooms of the same size with the same bulbs can look very different.</p>`,
       es: `
         <p>En la caja de una bombilla aparecen muchos números, pero solo tres importan para saber si la habitación quedará bien iluminada:</p>
         <ul>
@@ -243,8 +243,8 @@ export const GUIDES = [
         </table>
         <p>La última columna muestra cuántos m² dejaría cada bombilla sola a 150 lux, el nivel de una sala de estar, con las pérdidas incluidas. Para otras habitaciones, usa la <a href="{{HUB_URL}}">calculadora</a>.</p>
         <h2 id="de-lumenes-a-lux">De lúmenes a lux</h2>
-        <p class="formula">lux ≈ lúmenes × 0,48 ÷ superficie (paredes claras)</p>
-        <p>El 0,48 representa la luz que se pierde en las paredes y con el tiempo (0,6 × 0,8). Con paredes oscuras baja a unos 0,32. Por eso dos salas del mismo tamaño, con las mismas bombillas, pueden verse muy distintas.</p>`,
+        <p class="formula">lux ≈ lúmenes × CU × 0,8 ÷ superficie</p>
+        <p>Es el método de los lúmenes. El CU (factor de utilización) es la parte de la luz que llega a la altura de una mesa; el 0,8 compensa la pérdida de brillo del LED y el polvo. En una habitación de 4 × 3 m con techo de 2,7 m y paredes claras, el CU ronda 0,42, así que llega cerca de 0,34 de los lúmenes; con paredes oscuras, unos 0,25. Por eso dos salas del mismo tamaño, con las mismas bombillas, pueden verse muy distintas.</p>`,
     },
     faq: {
       pt: [

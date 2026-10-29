@@ -32,9 +32,14 @@ import {
   WALL_COLORS,
   FURNITURE_CATALOG,
   SCENE_PRESETS,
+  ROOM_TYPES,
   calculateRoomArea,
+  roomGeometry,
+  wallReflectance,
 } from './utils/lightingPhysics';
+import { estimateLux, roomIndex, utilizationFactor, MAINTENANCE_FACTOR, ROOM_LUX } from './utils/illuminance';
 import { TRANSLATIONS } from './utils/i18n';
+import { HUB_SLUG } from '../seo/routes.mjs';
 
 const LANGS = ['pt', 'en', 'es'];
 const HTML_LANG = { pt: 'pt-BR', en: 'en', es: 'es' };
@@ -103,6 +108,7 @@ export default function App() {
   const suppressClick = useRef(false);
 
   const canvasRef = useRef(null);
+  const luxPanelRef = useRef(null);
 
   // Dynamically localize lamp and furniture names whenever language changes
   const localizedLamps = useMemo(() => {
@@ -159,26 +165,53 @@ export default function App() {
     () => Number(lamps.reduce((acc, l) => acc + (l.isOn ? l.watts : 0), 0).toFixed(1)),
     [lamps]
   );
+  // Lumen method: lux = lumens × CU × MF ÷ area (see utils/illuminance.js)
+  const photometry = useMemo(() => {
+    const geometry = roomGeometry(room);
+    const rho = wallReflectance(room);
+    const k = roomIndex(geometry);
+    return { geometry, rho, k, cu: utilizationFactor(k, rho) };
+  }, [room]);
   const averageLux = useMemo(
-    () => Math.round(totalLumens / Math.max(1, roomArea)),
-    [totalLumens, roomArea]
+    () => Math.round(estimateLux(totalLumens, photometry.geometry, photometry.rho)),
+    [totalLumens, photometry]
   );
 
-  const luxAssessment = useMemo(() => {
+  const roomType = ROOM_LUX[room.roomType] ? room.roomType : 'living';
+  const luxTarget = ROOM_LUX[roomType];
+
+  // Mood: what kind of light the room has, whatever its use
+  const luxMood = useMemo(() => {
     if (averageLux <= 0) {
       return { label: t.luxDark, color: 'text-slate-400', bg: 'bg-slate-800/80' };
     }
-    if (averageLux < 80) {
+    if (averageLux < 50) {
       return { label: t.luxDim, color: 'text-amber-300', bg: 'bg-amber-950/70' };
     }
-    if (averageLux < 200) {
+    if (averageLux < 150) {
       return { label: t.luxCozy, color: 'text-emerald-300', bg: 'bg-emerald-950/70' };
     }
-    if (averageLux < 450) {
+    if (averageLux < 300) {
       return { label: t.luxIdeal, color: 'text-sky-300', bg: 'bg-sky-950/70' };
     }
     return { label: t.luxIntense, color: 'text-purple-300', bg: 'bg-purple-950/70' };
   }, [averageLux, t]);
+
+  // Assessment: how the lux compares with the recommendation for the chosen room use
+  const luxAssessment = useMemo(() => {
+    const [min, max] = luxTarget.lux;
+    const range = `${t.roomTypes[roomType]}: ${min}–${max} lx`;
+    if (averageLux < min * 0.7) {
+      return { label: t.luxLow, short: t.luxLowShort, min, max, range, color: 'text-amber-200', icon: '▼' };
+    }
+    if (averageLux < min) {
+      return { label: t.luxSlightlyLow, short: t.luxSlightlyLowShort, min, max, range, color: 'text-yellow-200', icon: '▼' };
+    }
+    if (averageLux <= max) {
+      return { label: t.luxGood, short: t.luxGoodShort, min, max, range, color: 'text-emerald-200', icon: '✓' };
+    }
+    return { label: t.luxHigh, short: t.luxHighShort, min, max, range, color: 'text-sky-200', icon: '▲' };
+  }, [averageLux, luxTarget, roomType, t]);
 
   // Tabs: on mobile, tapping a tab opens the sheet; tapping the active tab again collapses it
   const handleTabClick = (tab) => {
@@ -477,12 +510,23 @@ export default function App() {
             </div>
 
             {/* Mobile/tablet: compact illuminance chip (the full metrics only fit on xl) */}
-            <div
-              className={`lg:hidden px-2 py-1 max-sm:px-1.5 max-sm:py-0.5 rounded-lg border border-white/10 text-[11px] font-bold whitespace-nowrap ${luxAssessment.bg} ${luxAssessment.color}`}
-              title={luxAssessment.label}
+            {/* Tap → opens the Room tab on the lux panel (touch has no hover title) */}
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('room');
+                setSheetOpen(true);
+                setTimeout(
+                  () => luxPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }),
+                  320
+                );
+              }}
+              className={`lg:hidden px-2 py-1 max-sm:px-1.5 max-sm:py-0.5 rounded-lg border border-white/10 text-[11px] font-bold whitespace-nowrap cursor-pointer ${luxMood.bg} ${luxMood.color}`}
+              title={`${luxMood.label} • ${luxAssessment.label} (${luxAssessment.range})`}
+              aria-label={`${averageLux} lux — ${luxMood.label}, ${luxAssessment.label} (${luxAssessment.range})`}
             >
-              {averageLux} lux
-            </div>
+              {averageLux} lux <span className={luxAssessment.color}>{luxAssessment.icon}</span>
+            </button>
 
             {/* Live Photometric Metrics */}
             <div className="hidden xl:flex items-center gap-4 text-xs px-1">
@@ -505,10 +549,15 @@ export default function App() {
                 </span>
                 <span className="font-bold text-white">{averageLux} lux</span>
               </div>
+              {/* Fixed width, short labels: the bar must not grow with the lux and push the actions down */}
               <div
-                className={`px-2.5 py-1 rounded-lg border border-white/10 text-[11px] font-medium ${luxAssessment.bg} ${luxAssessment.color}`}
+                className={`w-40 px-2.5 py-1 rounded-lg border border-white/10 text-[11px] font-medium leading-tight ${luxMood.bg} ${luxMood.color}`}
+                title={`${luxMood.label} • ${luxAssessment.label} (${luxAssessment.range})`}
               >
-                {luxAssessment.label}
+                <span className="block truncate">{luxMood.label.replace(/\s*\(.*\)$/, '')}</span>
+                <span className={`block truncate text-[10px] font-normal ${luxAssessment.color}`}>
+                  {luxAssessment.icon} {luxAssessment.short} · {t.recShort} {luxAssessment.min}–{luxAssessment.max} lx
+                </span>
               </div>
             </div>
           </div>
@@ -1106,6 +1155,76 @@ export default function App() {
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* Room Use → recommended lux */}
+              <div className="space-y-2 pt-2 border-t border-slate-800/80">
+                <label className="text-xs font-semibold text-slate-200 block">
+                  {t.roomTypeLabel}
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {ROOM_TYPES.map((id) => (
+                    <button
+                      key={id}
+                      onClick={() => setRoom((r) => ({ ...r, roomType: id }))}
+                      className={`flex items-center justify-between gap-1 py-1.5 px-2.5 rounded-xl border text-xs transition-all cursor-pointer ${
+                        roomType === id
+                          ? 'bg-amber-500/20 border-amber-400 text-amber-300 font-semibold'
+                          : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <span className="truncate">{t.roomTypes[id]}</span>
+                      <span className="text-[10px] opacity-70 whitespace-nowrap">
+                        {ROOM_LUX[id].lux[0]}–{ROOM_LUX[id].lux[1]}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Estimated illuminance (lumen method) */}
+              <div
+                ref={luxPanelRef}
+                className="space-y-2 bg-slate-950/50 p-3.5 rounded-2xl border border-slate-800"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-200">{t.luxMethodTitle}</span>
+                  <span className="text-sm font-bold text-white">{averageLux} lux</span>
+                </div>
+                <div
+                  className={`px-2.5 py-1.5 rounded-lg border border-white/10 text-[11px] font-medium ${luxMood.bg} ${luxMood.color}`}
+                >
+                  <span className="opacity-70">{t.luxMood}:</span> {luxMood.label}
+                  <span className={`block mt-0.5 ${luxAssessment.color}`}>
+                    {luxAssessment.icon} {luxAssessment.label}
+                  </span>
+                  <span className="block text-[10px] font-normal text-slate-300/80">
+                    {t.recommended} · {luxAssessment.range}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-[11px] text-center">
+                  <div className="bg-slate-900/70 rounded-lg py-1">
+                    <span className="block text-slate-500">K</span>
+                    <span className="font-semibold text-slate-200">{photometry.k.toFixed(2)}</span>
+                  </div>
+                  <div className="bg-slate-900/70 rounded-lg py-1">
+                    <span className="block text-slate-500">CU</span>
+                    <span className="font-semibold text-slate-200">{photometry.cu.toFixed(2)}</span>
+                  </div>
+                  <div className="bg-slate-900/70 rounded-lg py-1">
+                    <span className="block text-slate-500">{lang === 'en' ? 'MF' : 'FM'}</span>
+                    <span className="font-semibold text-slate-200">{MAINTENANCE_FACTOR}</span>
+                  </div>
+                </div>
+                <p className="text-[11px] leading-relaxed text-slate-400">
+                  {t.luxMethodNote}{' '}
+                  <a
+                    href={`/${lang}/${HUB_SLUG[lang]}/#how`}
+                    className="text-amber-300 hover:text-amber-200 underline underline-offset-2"
+                  >
+                    {t.luxMethodLink}
+                  </a>
+                </p>
               </div>
 
               {/* Room Shape */}

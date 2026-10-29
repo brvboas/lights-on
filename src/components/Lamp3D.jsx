@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
 import { Line, Html } from '@react-three/drei';
-import { kelvinToHex } from '../utils/lightingPhysics';
+import { kelvinToHex, RENDER_SCALE } from '../utils/lightingPhysics';
 
 export default function Lamp3D({
   lamp,
@@ -34,11 +34,10 @@ export default function Lamp3D({
     return ceilingY - 0.08 * scale;
   }, [type, ceilingY, scale, heightOffset]);
 
-  // Convert Lumens to Three.js candela/intensity for realistic lighting
+  // Lumens → candela (isotropic source: lm ÷ 4π), scaled to the render calibration
   const lightIntensity = useMemo(() => {
     if (!isOn) return 0;
-    // Physically scaled intensity for indoor meter units
-    return (lumens / 110) * 1.15;
+    return (lumens / (4 * Math.PI)) * RENDER_SCALE;
   }, [isOn, lumens]);
 
   const dragPlane = useMemo(
@@ -111,8 +110,10 @@ export default function Lamp3D({
         position={[0, bulbY - (type === 'plafon' ? 0.08 : 0.02), 0]}
         color={colorHex}
         intensity={lightIntensity}
+        // distance also bounds the shadow camera (far = distance); 0 would mean far = 500 m and
+        // blurry, imprecise shadows. At 2.5× the room size the cut-off barely dims the light.
         distance={Math.max(room.width, room.depth) * 2.5}
-        decay={1.75}
+        decay={2}
         castShadow
         shadow-mapSize-width={1024}
         shadow-mapSize-height={1024}

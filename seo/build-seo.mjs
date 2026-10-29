@@ -24,14 +24,29 @@ import { TRANSLATIONS } from '../src/utils/i18n.js';
 import { LANGS, HTML_LANG, LANG_NAMES, HUB_SLUG, detectLang } from './routes.mjs';
 import { CREDIT_COPY, LINKEDIN, GITHUB } from './content/credit.mjs';
 import {
-  WALL_TONE_UF,
+  WALL_TONE_REFLECTANCE,
   MAINTENANCE_FACTOR,
   LED_LM_PER_W,
-  lightLossFactor,
+  rectGeometry,
+  geometryFromArea,
+  roomIndex,
+  utilizationFactor,
   lumensNeeded,
-} from './illuminance.mjs';
+  areaLitBy,
+} from '../src/utils/illuminance.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+
+/** Lumen-method module, inlined (without exports and comments) in the page calculator. */
+const ILLUMINANCE_JS = (await readFile(join(ROOT, 'src/utils/illuminance.js'), 'utf8'))
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/^export /gm, '')
+  .replace(/\n\s*\n/g, '\n')
+  .trim();
+
+/** Ceiling height assumed in the tables (m) and reflectance of "light" walls. */
+const TABLE_HEIGHT = 2.7;
+const LIGHT_WALLS = WALL_TONE_REFLECTANCE.light;
 const DIST = join(ROOT, 'dist');
 
 /* ------------------------------------------------------------------ helpers */
@@ -56,8 +71,16 @@ const simUrl = (lang) => `/${lang}/`;
 function roomFacts(room, lang) {
   const [w, d] = room.size;
   const area = Number((w * d).toFixed(1));
-  const lm = roundLm(lumensNeeded(room.target, area, 'light', 2.7));
+  const geo = rectGeometry(w, d, TABLE_HEIGHT);
+  const k = roomIndex(geo);
+  const uf = utilizationFactor(k, LIGHT_WALLS);
+  const lm = roundLm(lumensNeeded(room.target, geo, LIGHT_WALLS));
   return {
+    h: fmt(TABLE_HEIGHT, lang, 2),
+    hu: fmt(TABLE_HEIGHT - 0.75, lang, 2),
+    k: fmt(k, lang, 2),
+    uf: fmt(uf, lang, 2),
+    mf: fmt(MAINTENANCE_FACTOR, lang, 1),
     w: fmt(w, lang, 1),
     d: fmt(d, lang, 1),
     area: fmt(area, lang, 1),
@@ -289,8 +312,7 @@ function calculator(lang, selectedRoom) {
   const cfg = {
     lang,
     locale: u.locale,
-    uf: WALL_TONE_UF,
-    mf: MAINTENANCE_FACTOR,
+    refl: WALL_TONE_REFLECTANCE,
     lmw: LED_LM_PER_W,
     bulbs: u.calcBulbsOf('{n}', '{w}', '{lm}'),
     or: u.calcOr,
@@ -322,13 +344,13 @@ function calculator(lang, selectedRoom) {
       <noscript><p>${esc(u.calcNoJs)}</p></noscript>
     </form>
     <script>(()=>{const C=${JSON.stringify(cfg)};
-const lightLossFactor=${lightLossFactor.toString().replace('WALL_TONE_UF', 'C.uf').replace('MAINTENANCE_FACTOR', 'C.mf')};
+${ILLUMINANCE_JS}
 const f=document.querySelector('[data-calc]'),o=(k)=>f.querySelector('[data-out="'+k+'"]');
 const nf=(n,d=0)=>new Intl.NumberFormat(C.locale,{maximumFractionDigits:d}).format(n);
 const rl=(lm)=>lm<1000?Math.round(lm/10)*10:Math.round(lm/50)*50;
 const num=(n,def)=>{const v=parseFloat(String(f.elements[n].value).replace(',','.'));return Number.isFinite(v)&&v>0?v:def;};
 function run(){const w=num('w',3),d=num('d',3),h=num('h',2.7),lux=num('lux',150),tone=f.elements.wall.value||'light';
-const sel=f.elements.room.selectedOptions[0];const area=w*d,k=lightLossFactor(tone,h);
+const sel=f.elements.room.selectedOptions[0];const g=rectGeometry(w,d,h),area=g.area,k=lightLossFactor(g,C.refl[tone]);
 const lm=rl(lux*area/k),mn=rl(+sel.dataset.min*area/k),mx=rl(+sel.dataset.max*area/k);
 o('lm').textContent=nf(lm)+' lm';o('range').textContent=nf(mn)+'–'+nf(mx)+' lm ('+sel.dataset.min+'–'+sel.dataset.max+' lx)';
 o('w').textContent='≈ '+nf(Math.round(lm/C.lmw))+' W';o('area').textContent=nf(area,1)+' m²';
@@ -370,7 +392,7 @@ function roomPage(room, lang) {
         <tbody>
           ${room.areas
             .map((a) => {
-              const lm = (tone) => roundLm(lumensNeeded(room.target, a, tone, 2.7));
+              const lm = (tone) => roundLm(lumensNeeded(room.target, geometryFromArea(a, TABLE_HEIGHT), WALL_TONE_REFLECTANCE[tone]));
               return `<tr><td>${fmt(a, lang)} m²${lang === 'en' ? ` <small>(${fmt(Math.round(a * 10.764), lang)} sq ft)</small>` : ''}</td><td class="num"><strong>${fmt(lm('light'), lang)} lm</strong></td><td class="num">${fmt(lm('medium'), lang)} lm</td><td class="num">${fmt(lm('dark'), lang)} lm</td><td class="num">≈ ${ledWatts(lm('light'))} W</td></tr>`;
             })
             .join('\n          ')}
@@ -472,7 +494,7 @@ function hubPage(lang) {
   const rows = `
         <thead><tr><th>${esc(u.colRoom)}</th><th class="num">${esc(u.general)}</th><th class="num">${esc(u.colKelvin)}</th><th class="num">${esc(u.colLumens(12))}</th></tr></thead>
         <tbody>
-          ${ROOMS.map((r) => `<tr><td><a href="${pagePath(lang, r.slug[lang])}">${esc(r.Name[lang])}</a><br><small>${esc(r.task_label[lang])}: ${r.task[0] === r.task[1] ? r.task[0] : `${r.task[0]}–${r.task[1]}`} lx</small></td><td class="num"><strong>${r.lux[0]}–${r.lux[1]} lx</strong></td><td class="num">${u.kelvinRange(...r.kelvin)}</td><td class="num">${fmt(roundLm(lumensNeeded(r.target, 12, 'light', 2.7)), lang)} lm</td></tr>`).join('\n          ')}
+          ${ROOMS.map((r) => `<tr><td><a href="${pagePath(lang, r.slug[lang])}">${esc(r.Name[lang])}</a><br><small>${esc(r.task_label[lang])}: ${r.task[0] === r.task[1] ? r.task[0] : `${r.task[0]}–${r.task[1]}`} lx</small></td><td class="num"><strong>${r.lux[0]}–${r.lux[1]} lx</strong></td><td class="num">${u.kelvinRange(...r.kelvin)}</td><td class="num">${fmt(roundLm(lumensNeeded(r.target, geometryFromArea(12, TABLE_HEIGHT), LIGHT_WALLS)), lang)} lm</td></tr>`).join('\n          ')}
         </tbody>`;
   const body = `    ${crumbs(crumbItems)}
     <h1>${esc(h.h1)}</h1>
@@ -525,7 +547,7 @@ function guidePage(guide, lang) {
   const ledRows = [5, 7, 9, 12, 15, 18, 24, 40]
     .map((w) => {
       const lm = w * LED_LM_PER_W;
-      const area = (lm * lightLossFactor('light', 2.7)) / 150;
+      const area = areaLitBy(lm, 150, TABLE_HEIGHT, LIGHT_WALLS);
       return `<tr><td>${w} W</td><td class="num"><strong>~${fmt(roundLm(lm), lang)} lm</strong></td><td class="num">≈ ${fmt(area, lang, 1)} m²</td></tr>`;
     })
     .join('');
