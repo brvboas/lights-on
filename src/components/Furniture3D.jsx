@@ -322,7 +322,7 @@ export default function Furniture3D({
             />
           </mesh>
 
-          <Html position={[0, 1.15, 0]} center distanceFactor={8}>
+          <Html position={[0, 1.15, 0]} center distanceFactor={8} zIndexRange={[15, 0]}>
             <div
               onClick={(e) => {
                 e.stopPropagation();

@@ -55,6 +55,8 @@ export default function App() {
   const [flashEffect, setFlashEffect] = useState(false);
   const [capturedPhoto, setCapturedPhoto] = useState(null);
   const [showFurnitureMenu, setShowFurnitureMenu] = useState(false);
+  // Mobile/tablet only (< lg): the sidebar becomes a bottom sheet that can be collapsed
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   const canvasRef = useRef(null);
 
@@ -133,6 +135,16 @@ export default function App() {
     }
     return { label: t.luxIntense, color: 'text-purple-300', bg: 'bg-purple-950/70' };
   }, [averageLux, t]);
+
+  // Tabs: on mobile, tapping a tab opens the sheet; tapping the active tab again collapses it
+  const handleTabClick = (tab) => {
+    if (tab === activeTab) {
+      setSheetOpen((o) => !o);
+    } else {
+      setActiveTab(tab);
+      setSheetOpen(true);
+    }
+  };
 
   // Lamp state handlers
   const handleSelectLamp = (id) => {
@@ -301,9 +313,9 @@ export default function App() {
   const anyLampOn = lamps.some((l) => l.isOn);
 
   return (
-    <div className="relative w-screen h-screen bg-slate-950 overflow-hidden select-none flex">
+    <div className="relative w-screen h-screen max-lg:h-dvh bg-slate-950 overflow-hidden select-none flex max-lg:flex-col">
       {/* 3D Interactive Viewport */}
-      <div className="flex-1 h-full relative">
+      <div className="flex-1 h-full max-lg:h-auto min-h-0 relative">
         <Scene3D
           room={room}
           lamps={localizedLamps}
@@ -343,8 +355,16 @@ export default function App() {
                     3D
                   </span>
                 </h1>
-                <p className="text-[11px] text-slate-400">{t.subtitle}</p>
+                <p className="text-[11px] text-slate-400 max-sm:hidden">{t.subtitle}</p>
               </div>
+            </div>
+
+            {/* Mobile/tablet: compact illuminance chip (the full metrics only fit on xl) */}
+            <div
+              className={`lg:hidden px-2 py-1 rounded-lg border border-white/10 text-[11px] font-bold whitespace-nowrap ${luxAssessment.bg} ${luxAssessment.color}`}
+              title={luxAssessment.label}
+            >
+              {averageLux} lux
             </div>
 
             {/* Live Photometric Metrics */}
@@ -393,7 +413,7 @@ export default function App() {
               ) : (
                 <LightbulbOff className="w-4 h-4" />
               )}
-              <span>{anyLampOn ? t.lightsOn : t.lightsOff}</span>
+              <span className="max-sm:hidden">{anyLampOn ? t.lightsOn : t.lightsOff}</span>
             </button>
 
             {/* Camera Angles */}
@@ -456,10 +476,11 @@ export default function App() {
             {/* Take Photo Button */}
             <button
               onClick={handleTakePhoto}
+              title={t.takePhoto}
               className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-400 hover:to-indigo-400 text-white text-xs font-semibold shadow-lg shadow-sky-500/20 transition-all cursor-pointer"
             >
               <Camera className="w-4 h-4" />
-              <span>{t.takePhoto}</span>
+              <span className="max-sm:hidden">{t.takePhoto}</span>
             </button>
           </div>
         </header>
@@ -482,12 +503,27 @@ export default function App() {
       </div>
 
       {/* Right Control Studio Sidebar */}
-      <aside className="w-96 max-w-full h-full bg-slate-900/95 backdrop-blur-2xl max-[900px]:backdrop-blur-none border-l border-slate-800/90 flex flex-col z-20 shadow-2xl">
+      <aside
+        className={`w-96 max-w-full h-full bg-slate-900/95 backdrop-blur-2xl max-[900px]:backdrop-blur-none border-l border-slate-800/90 flex flex-col z-20 shadow-2xl max-lg:w-full max-lg:max-w-none max-lg:shrink-0 max-lg:border-l-0 max-lg:border-t max-lg:rounded-t-2xl max-lg:pb-[env(safe-area-inset-bottom)] ${
+          sheetOpen ? 'max-lg:h-[min(58dvh,560px)]' : 'max-lg:h-auto'
+        }`}
+      >
+        {/* Mobile/tablet: grab handle that opens/collapses the bottom sheet */}
+        <button
+          type="button"
+          onClick={() => setSheetOpen((o) => !o)}
+          aria-expanded={sheetOpen}
+          aria-label={sheetOpen ? t.collapsePanel : t.expandPanel}
+          className="lg:hidden flex items-center justify-center w-full pt-2 pb-0.5 cursor-pointer"
+        >
+          <span className="w-10 h-1 rounded-full bg-slate-600" />
+        </button>
+
         {/* Navigation Tabs */}
         <div className="grid grid-cols-3 gap-1 p-2 bg-slate-950/60 border-b border-slate-800/80">
           <button
-            onClick={() => setActiveTab('lamps')}
-            className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+            onClick={() => handleTabClick('lamps')}
+            className={`flex items-center justify-center gap-1.5 py-2 px-3 max-sm:px-1.5 max-sm:gap-1 max-sm:whitespace-nowrap max-[400px]:[&>svg]:hidden rounded-xl text-xs font-semibold transition-all cursor-pointer ${
               activeTab === 'lamps'
                 ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
@@ -500,8 +536,8 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => setActiveTab('room')}
-            className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+            onClick={() => handleTabClick('room')}
+            className={`flex items-center justify-center gap-1.5 py-2 px-3 max-sm:px-1.5 max-sm:gap-1 max-sm:whitespace-nowrap max-[400px]:[&>svg]:hidden rounded-xl text-xs font-semibold transition-all cursor-pointer ${
               activeTab === 'room'
                 ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
@@ -512,8 +548,8 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => setActiveTab('furniture')}
-            className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+            onClick={() => handleTabClick('furniture')}
+            className={`flex items-center justify-center gap-1.5 py-2 px-3 max-sm:px-1.5 max-sm:gap-1 max-sm:whitespace-nowrap max-[400px]:[&>svg]:hidden rounded-xl text-xs font-semibold transition-all cursor-pointer ${
               activeTab === 'furniture'
                 ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
@@ -527,7 +563,7 @@ export default function App() {
         </div>
 
         {/* Scrollable Content Area */}
-        <div className="flex-1 overflow-y-auto p-3.5 space-y-4">
+        <div className={`flex-1 min-h-0 overflow-y-auto p-3.5 space-y-4 ${sheetOpen ? '' : 'max-lg:hidden'}`}>
           {/* ==========================================================
               TAB 1: LAMPS (COLOR TEMPERATURE, LUMENS, WATTS, FIXTURE SIZE)
           ========================================================== */}
@@ -1347,7 +1383,7 @@ export default function App() {
         {/* Footer — author credit: small head opens LinkedIn / GitHub / inspiração */}
         <footer
           role="contentinfo"
-          className="relative shrink-0 flex items-center justify-between gap-3 px-4 py-1.5 border-t border-slate-800/80 bg-slate-950/60"
+          className={`relative shrink-0 flex items-center justify-between gap-3 px-4 py-1.5 border-t border-slate-800/80 bg-slate-950/60 ${sheetOpen ? '' : 'max-lg:hidden'}`}
         >
           <span className="whitespace-nowrap font-mono text-[10px] tracking-wider text-slate-500">
             LuminaStudio 3D © 2026

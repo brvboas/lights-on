@@ -302,7 +302,7 @@ export default function Lamp3D({
           </mesh>
 
           {/* Floating Mini Badge in 3D */}
-          <Html position={[0, bulbY + 0.28 * scale, 0]} center distanceFactor={8}>
+          <Html position={[0, bulbY + 0.28 * scale, 0]} center distanceFactor={8} zIndexRange={[15, 0]}>
             <div
               onClick={(e) => {
                 e.stopPropagation();
