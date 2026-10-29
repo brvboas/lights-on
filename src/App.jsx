@@ -22,6 +22,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import Scene3D from './components/Scene3D';
+import AuthorCredit from './components/AuthorCredit';
 import {
   kelvinToHex,
   WATT_PRESETS,
@@ -481,7 +482,7 @@ export default function App() {
       </div>
 
       {/* Right Control Studio Sidebar */}
-      <aside className="w-96 max-w-full h-full bg-slate-900/95 backdrop-blur-2xl border-l border-slate-800/90 flex flex-col z-20 shadow-2xl">
+      <aside className="w-96 max-w-full h-full bg-slate-900/95 backdrop-blur-2xl max-[900px]:backdrop-blur-none border-l border-slate-800/90 flex flex-col z-20 shadow-2xl">
         {/* Navigation Tabs */}
         <div className="grid grid-cols-3 gap-1 p-2 bg-slate-950/60 border-b border-slate-800/80">
           <button
@@ -1342,6 +1343,17 @@ export default function App() {
             </div>
           )}
         </div>
+
+        {/* Footer — author credit (head opens LinkedIn/GitHub, the lamp opens the design note) */}
+        <footer
+          role="contentinfo"
+          className="relative shrink-0 flex items-end justify-between gap-3 px-4 py-2.5 border-t border-slate-800/80 bg-slate-950/60"
+        >
+          <span className="hidden min-[601px]:block pb-1.5 whitespace-nowrap font-mono text-[10px] tracking-wider text-slate-500">
+            LuminaStudio 3D © 2026
+          </span>
+          <AuthorCredit lang={lang} />
+        </footer>
       </aside>
 
       {/* Photo Preview & Download Modal */}

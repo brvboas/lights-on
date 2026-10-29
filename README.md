@@ -48,7 +48,11 @@ lights_on/
     ├── main.jsx                # React DOM root mount
     ├── index.css               # Global CSS and custom scrollbars
     ├── App.jsx                 # Main UI layout, state management, and sidebar controls
+    ├── assets/img/credit/
+    │   └── bruno-head.webp     # Footer author credit
     ├── components/
+    │   ├── AuthorCredit.jsx    # Footer signature: LinkedIn/GitHub menu + "inspiração" design note
+    │   ├── AuthorCredit.css    # Signature styles, themed to the app
     │   ├── Scene3D.jsx         # Three.js Canvas, camera, OrbitControls, and raycast floor drag plane
     │   ├── RoomMesh.jsx        # Procedural 3D walls, floors, grids, and baseboards per room shape
     │   ├── Lamp3D.jsx          # 3D lamp models, dynamic PointLight/SpotLight, and selection HUD
@@ -94,3 +98,22 @@ To preview the production build locally:
 ```bash
 npm run preview
 ```
+
+---
+
+## Design inspiration
+
+- The app should feel like a room at night, right before someone turns the lights on: dark slate everywhere, so the lamps are what shines.
+- Panels float over the 3D scene like frosted glass, keeping the room visible behind the controls.
+- Amber only appears where there is energy: the all-lights switch, the lamps tab, the lumen readouts.
+- Blue is reserved for the camera and the furniture, like the cold light of a screen.
+- Double-click lamps on and off and take a photo with a flash, as if walking through a site visit.
+- The why: picking a bulb is usually a guess (9 W or 12 W? 3000 K or 4000 K?). Here you can test it before drilling the ceiling.
+
+The same text, in Portuguese and in Bruno's own voice, is in the footer behind the **"inspiração"** lamp.
+
+## Credits
+
+Design and development by **Bruno Villas Boas**. In the app footer, the head of his 3D figure opens a small menu with these links.
+
+[LinkedIn](https://www.linkedin.com/in/bruno-villas-boas/) · [GitHub](https://github.com/brvboas)
