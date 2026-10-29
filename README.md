@@ -57,9 +57,12 @@ lights_on/
     │   ├── Scene3D.jsx         # Three.js Canvas, camera, OrbitControls, and raycast floor drag plane
     │   ├── RoomMesh.jsx        # Procedural 3D walls, floors, grids, and baseboards per room shape
     │   ├── Lamp3D.jsx          # 3D lamp models, dynamic PointLight/SpotLight, and selection HUD
-    │   └── Furniture3D.jsx     # Procedural 3D furniture models with shadow casting and drag support
+    │   ├── Furniture3D.jsx     # Procedural 3D furniture models with shadow casting and drag support
+    │   └── MethodologyModal.jsx # "How lux is calculated": live worked example, ranges, references
     └── utils/
-        ├── lightingPhysics.js  # Photometric conversions (Kelvin to RGB, Watts/Lumens, Lux) & catalogs
+        ├── illuminance.js      # Lumen method (K, CU table, MF) + recommended lux per room — shared with seo/
+        ├── references.js       # Standards and books behind the numbers (simulator + SEO pages)
+        ├── lightingPhysics.js  # Kelvin to RGB, Watts/Lumens, room geometry, 3D render calibration & catalogs
         └── i18n.js             # Portuguese (pt), English (en) and Spanish (es) dictionaries
 seo/                            # Post-build SEO step: per-language pages, guides, sitemap (see "SEO")
 public/                         # favicon, app icons, og-image.png (social preview), web manifest
@@ -118,7 +121,7 @@ npm run preview
 | `/<lang>/<guide>/` | Color temperature by room; lux vs lumens vs watts |
 | `/sitemap.xml`, `/robots.txt`, `/404.html` | Sitemap with `hreflang` alternates, crawler rules, real 404 page |
 
-The guide pages estimate lumens with light losses (`seo/illuminance.mjs`: wall color and maintenance factor) and say so; the simulator keeps its simple lumens ÷ area readout.
+The guide pages and the simulator use the same lumen-method module (`src/utils/illuminance.js`); `build-seo.mjs` inlines it into the page calculator, so keep that file free of imports. Each page lists its references (`src/utils/references.js`).
 
 **When the domain is bought:** change `SITE_URL` in `seo/site.config.mjs`, rebuild and deploy, then add the domain to Google Search Console / Bing Webmaster Tools and submit `/sitemap.xml`.
 

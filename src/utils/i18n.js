@@ -116,6 +116,7 @@ export const TRANSLATIONS = {
     luxMethodNote:
       'Lux médio na altura de uma mesa (0,75 m), pelo método dos lúmens: lúmens × CU × FM ÷ área. Considera o formato do cômodo, o pé-direito e a cor das paredes.',
     luxMethodLink: 'Como o cálculo é feito',
+    methodBtn: 'Como calculamos',
     walls: {
       off_white: 'Branco Neve',
       sand: 'Areia / Linho',
@@ -271,6 +272,7 @@ export const TRANSLATIONS = {
     luxMethodNote:
       'Average lux at table height (0.75 m), using the lumen method: lumens × CU × MF ÷ area. It accounts for room shape, ceiling height and wall color.',
     luxMethodLink: 'How the math works',
+    methodBtn: 'How we calculate',
     walls: {
       off_white: 'Snow White',
       sand: 'Sand / Linen',
@@ -426,6 +428,7 @@ export const TRANSLATIONS = {
     luxMethodNote:
       'Lux medios a la altura de una mesa (0,75 m), con el método de los lúmenes: lúmenes × CU × FM ÷ superficie. Tiene en cuenta la forma de la habitación, la altura del techo y el color de las paredes.',
     luxMethodLink: 'Cómo se hace el cálculo',
+    methodBtn: 'Cómo calculamos',
     walls: {
       off_white: 'Blanco Nieve',
       sand: 'Arena / Lino',

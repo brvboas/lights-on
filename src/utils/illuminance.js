@@ -121,12 +121,3 @@ export function estimateLux(lumens, geometry, wallReflectance) {
 export function lumensNeeded(lux, geometry, wallReflectance) {
   return (lux * geometry.area) / lightLossFactor(geometry, wallReflectance);
 }
-
-/** Floor area (m², 4:3 room) that a given flux keeps at the target lux. */
-export function areaLitBy(lumens, lux, height, wallReflectance) {
-  let area = lumens / lux;
-  for (let n = 0; n < 30; n++) {
-    area = (lumens * lightLossFactor(geometryFromArea(area, height), wallReflectance)) / lux;
-  }
-  return area;
-}

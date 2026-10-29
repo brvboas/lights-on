@@ -20,9 +20,11 @@ import {
   Crosshair,
   Globe,
   ChevronDown,
+  Info,
 } from 'lucide-react';
 import Scene3D from './components/Scene3D';
 import AuthorCredit from './components/AuthorCredit';
+import MethodologyModal from './components/MethodologyModal';
 import {
   kelvinToHex,
   WATT_PRESETS,
@@ -109,6 +111,7 @@ export default function App() {
 
   const canvasRef = useRef(null);
   const luxPanelRef = useRef(null);
+  const [showMethod, setShowMethod] = useState(false);
 
   // Dynamically localize lamp and furniture names whenever language changes
   const localizedLamps = useMemo(() => {
@@ -559,6 +562,15 @@ export default function App() {
                   {luxAssessment.icon} {luxAssessment.short} · {t.recShort} {luxAssessment.min}–{luxAssessment.max} lx
                 </span>
               </div>
+              <button
+                type="button"
+                onClick={() => setShowMethod(true)}
+                title={t.methodBtn}
+                aria-label={t.methodBtn}
+                className="-ml-2 p-1.5 rounded-lg text-slate-400 hover:text-amber-300 hover:bg-slate-800 cursor-pointer"
+              >
+                <Info className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
@@ -1218,12 +1230,13 @@ export default function App() {
                 </div>
                 <p className="text-[11px] leading-relaxed text-slate-400">
                   {t.luxMethodNote}{' '}
-                  <a
-                    href={`/${lang}/${HUB_SLUG[lang]}/#how`}
-                    className="text-amber-300 hover:text-amber-200 underline underline-offset-2"
+                  <button
+                    type="button"
+                    onClick={() => setShowMethod(true)}
+                    className="inline text-amber-300 hover:text-amber-200 underline underline-offset-2 cursor-pointer"
                   >
                     {t.luxMethodLink}
-                  </a>
+                  </button>
                 </p>
               </div>
 
@@ -1635,9 +1648,37 @@ export default function App() {
           <span className="whitespace-nowrap font-mono text-[10px] tracking-wider text-slate-500">
             LuminaStudio 3D © 2026
           </span>
+          <button
+            type="button"
+            onClick={() => setShowMethod(true)}
+            className="flex items-center gap-1 text-[11px] font-medium text-slate-400 hover:text-amber-300 cursor-pointer whitespace-nowrap"
+          >
+            <Info className="w-3.5 h-3.5" />
+            {t.methodBtn}
+          </button>
           <AuthorCredit lang={lang} />
         </footer>
       </aside>
+
+      {/* How the lux is calculated (formula, live example, references) */}
+      <MethodologyModal
+        open={showMethod}
+        onClose={() => setShowMethod(false)}
+        lang={lang}
+        t={t}
+        hubUrl={`/${lang}/${HUB_SLUG[lang]}/#how`}
+        data={{
+          lumens: totalLumens,
+          area: photometry.geometry.area,
+          perimeter: photometry.geometry.perimeter,
+          height: room.height,
+          k: photometry.k,
+          cu: photometry.cu,
+          rho: photometry.rho,
+          lux: averageLux,
+          roomType,
+        }}
+      />
 
       {/* Photo Preview & Download Modal */}
       {capturedPhoto && (

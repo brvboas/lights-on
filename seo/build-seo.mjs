@@ -32,8 +32,9 @@ import {
   roomIndex,
   utilizationFactor,
   lumensNeeded,
-  areaLitBy,
+  lightLossFactor,
 } from '../src/utils/illuminance.js';
+import { REFERENCES } from '../src/utils/references.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -275,7 +276,19 @@ function careBlock(lang) {
       ${u.care}
     </section>
     <h2 id="sources">${esc(u.sourcesTitle)}</h2>
-    <p class="sources">${esc(u.sources)}</p>`;
+    <p class="sources">${esc(u.sources)}</p>
+    ${referencesList(lang)}`;
+}
+
+/** Numbered list of the standards and books behind the numbers (shared with the simulator). */
+function referencesList(lang) {
+  const items = REFERENCES.map((r) => {
+    const title = r.url
+      ? `<a href="${esc(r.url)}" rel="noopener" target="_blank">${esc(r.title)}</a>`
+      : esc(r.title);
+    return `<li><strong>${title}</strong><br><small>${esc(r.org)} · ${esc(r.use[lang] || r.use.en)}</small></li>`;
+  }).join('');
+  return `<ol class="refs">${items}</ol>`;
 }
 
 function ctaBlock(lang, href) {
@@ -547,7 +560,9 @@ function guidePage(guide, lang) {
   const ledRows = [5, 7, 9, 12, 15, 18, 24, 40]
     .map((w) => {
       const lm = w * LED_LM_PER_W;
-      const area = areaLitBy(lm, 150, TABLE_HEIGHT, LIGHT_WALLS);
+      // m² one bulb keeps at 150 lux as part of a typical 12 m² room (a lone bulb in a 1–2 m²
+      // closet would have a much lower utilization factor and mislead)
+      const area = (lm * lightLossFactor(geometryFromArea(12, TABLE_HEIGHT), LIGHT_WALLS)) / 150;
       return `<tr><td>${w} W</td><td class="num"><strong>~${fmt(roundLm(lm), lang)} lm</strong></td><td class="num">≈ ${fmt(area, lang, 1)} m²</td></tr>`;
     })
     .join('');

@@ -89,7 +89,7 @@ export default function Scene3D({
       >
         <color attach="background" args={['#090d16']} />
 
-        {/* Subtle ambient & hemisphere light so the room isn't pitch-black when lamps are off */}
+        {/* Ambient + hemisphere: inter-reflected light from the lamps plus the day/night base */}
         <ambientLight intensity={ambientLux * RENDER_SCALE * 0.6} color="#cbd5e1" />
         <hemisphereLight
           skyColor="#94a3b8"

@@ -183,7 +183,7 @@ export const GUIDES = [
           <thead><tr><th>LED</th><th>Lúmens típicos</th><th>Ilumina, a 150 lux (paredes claras)</th></tr></thead>
           <tbody>{{LED_TABLE}}</tbody>
         </table>
-        <p>A última coluna mostra quantos m² cada lâmpada sozinha deixaria com 150 lux, o nível de uma sala de estar, já com as perdas. Para outros cômodos, use a <a href="{{HUB_URL}}">calculadora</a>.</p>
+        <p>A última coluna mostra quantos m² cada lâmpada cobre a 150 lux, o nível de uma sala de estar, já com as perdas, num cômodo típico de uns 12 m² com paredes claras e pé-direito de 2,7 m. Para outros cômodos, use a <a href="{{HUB_URL}}">calculadora</a>.</p>
         <h2 id="de-lumens-para-lux">De lúmens para lux</h2>
         <p class="formula">lux ≈ lúmens × CU × 0,8 ÷ área</p>
         <p>É o método dos lúmens. O CU (fator de utilização) é a parte da luz que chega à altura de uma mesa; o 0,8 compensa a perda de brilho do LED e a poeira. Num cômodo de 4 × 3 m com pé-direito de 2,7 m e paredes claras, o CU fica perto de 0,42, então chegam cerca de 0,34 dos lúmens; com paredes escuras, cerca de 0,25. Por isso duas salas do mesmo tamanho, com as mesmas lâmpadas, podem parecer bem diferentes.</p>`,
@@ -212,7 +212,7 @@ export const GUIDES = [
           <thead><tr><th>LED</th><th>Typical lumens</th><th>Lights, at 150 lux (light walls)</th></tr></thead>
           <tbody>{{LED_TABLE}}</tbody>
         </table>
-        <p>The last column shows how many m² each bulb alone would bring to 150 lux, a living-room level, losses included. For other rooms, use the <a href="{{HUB_URL}}">calculator</a>.</p>
+        <p>The last column shows how many m² each bulb covers at 150 lux, a living-room level, losses included, in a typical room of about 12 m² (130 sq ft) with light walls and a 2.7 m (9 ft) ceiling. For other rooms, use the <a href="{{HUB_URL}}">calculator</a>.</p>
         <h2 id="lumens-to-lux">From lumens to lux</h2>
         <p class="formula">lux ≈ lumens × CU × 0.8 ÷ area</p>
         <p>This is the lumen method. CU (coefficient of utilization) is the share of the light that reaches table height; the 0.8 covers LED depreciation and dust. In a 4 × 3 m (13 × 10 ft) room with a 2.7 m (9 ft) ceiling and light walls, CU is about 0.42, so roughly 0.34 of the lumens arrive; with dark walls, about 0.25. That is why two rooms of the same size with the same bulbs can look very different.</p>`,
@@ -241,7 +241,7 @@ export const GUIDES = [
           <thead><tr><th>LED</th><th>Lúmenes típicos</th><th>Ilumina, a 150 lux (paredes claras)</th></tr></thead>
           <tbody>{{LED_TABLE}}</tbody>
         </table>
-        <p>La última columna muestra cuántos m² dejaría cada bombilla sola a 150 lux, el nivel de una sala de estar, con las pérdidas incluidas. Para otras habitaciones, usa la <a href="{{HUB_URL}}">calculadora</a>.</p>
+        <p>La última columna muestra cuántos m² cubre cada bombilla a 150 lux, el nivel de una sala de estar, con las pérdidas incluidas, en una habitación típica de unos 12 m² con paredes claras y techo de 2,7 m. Para otras habitaciones, usa la <a href="{{HUB_URL}}">calculadora</a>.</p>
         <h2 id="de-lumenes-a-lux">De lúmenes a lux</h2>
         <p class="formula">lux ≈ lúmenes × CU × 0,8 ÷ superficie</p>
         <p>Es el método de los lúmenes. El CU (factor de utilización) es la parte de la luz que llega a la altura de una mesa; el 0,8 compensa la pérdida de brillo del LED y el polvo. En una habitación de 4 × 3 m con techo de 2,7 m y paredes claras, el CU ronda 0,42, así que llega cerca de 0,34 de los lúmenes; con paredes oscuras, unos 0,25. Por eso dos salas del mismo tamaño, con las mismas bombillas, pueden verse muy distintas.</p>`,
