@@ -22,10 +22,12 @@ import {
   Info,
   MoreHorizontal,
   ChevronRight,
+  Upload,
 } from 'lucide-react';
 import Scene3D from './components/Scene3D';
 import AuthorCredit from './components/AuthorCredit';
 import MethodologyModal from './components/MethodologyModal';
+import ImportPanel from './components/ImportPanel';
 import LightingCard, { fill } from './components/LightingCard';
 import {
   kelvinToHex,
@@ -49,6 +51,30 @@ import {
   LAMP_MAX_LM,
 } from './utils/lightAdjust';
 import { HUB_SLUG } from '../seo/routes.mjs';
+import {
+  loadModel,
+  guessSetup,
+  buildModelRoot,
+  countTriangles,
+  kelvinFromColor,
+  lampTypeFromName,
+  usefulLightName,
+} from './utils/modelImport';
+
+const clampDim = (v) => Math.min(9, Math.max(2.5, Math.round(v * 4) / 4));
+
+/** Frees the GPU memory of a model that is being replaced or removed. */
+function disposeModel(object) {
+  object?.traverse((o) => {
+    if (!o.isMesh) return;
+    o.geometry?.dispose();
+    (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => {
+      if (!m) return;
+      Object.values(m).forEach((v) => v && v.isTexture && v.dispose());
+      m.dispose();
+    });
+  });
+}
 
 const LANGS = ['pt', 'en', 'es'];
 const HTML_LANG = { pt: 'pt-BR', en: 'en', es: 'es' };
@@ -120,6 +146,11 @@ export default function App() {
   const moreRef = useRef(null);
   const [advOpen, setAdvOpen] = useState(false); // lamp tab: advanced settings
   const [finishesOpen, setFinishesOpen] = useState(false); // room tab: wall/floor
+  // Imported project: { object, name, format, size, triangles, setup: { unit, zUp, floorLevel, cut } }
+  const [importedModel, setImportedModel] = useState(null);
+  const [importStatus, setImportStatus] = useState({ loading: false, error: null });
+  const [importOpen, setImportOpen] = useState(false);
+  const [sceneDrop, setSceneDrop] = useState(false); // a file is being dragged over the 3D view
   const [toast, setToast] = useState(null); // { message, lamps (snapshot to undo), id }
   const [showHints, setShowHints] = useState(() => {
     try {
@@ -448,6 +479,128 @@ export default function App() {
     }
   };
 
+  // Import a project (3D model) — read in the browser, nothing is uploaded
+  // ceiling: detected from the project's slab, kept within the ceiling-height slider
+  const fitRoomToModel = (size, ceiling) =>
+    setRoom((r) => ({
+      ...r,
+      shape: 'imported',
+      width: Math.max(1, Number(size.x.toFixed(2))),
+      depth: Math.max(1, Number(size.z.toFixed(2))),
+      ...(ceiling ? { height: Math.min(4.2, Math.max(2.3, Math.floor(ceiling * 20) / 20)) } : {}),
+    }));
+
+  const handleImportFiles = async (files) => {
+    if (!files || !files.length || importStatus.loading) return;
+    setImportStatus({ loading: true, error: null });
+    try {
+      const { object, name, format } = await loadModel(files);
+      const guess = guessSetup(object, format);
+      const setup = { unit: guess.unit, zUp: guess.zUp, floorLevel: 0, cut: true };
+      const { size, lights, ceiling } = buildModelRoot(object, setup);
+      disposeModel(importedModel?.object);
+      setImportedModel({ object, name, format, setup, size, lights, ceiling, triangles: countTriangles(object) });
+      fitRoomToModel(size, ceiling);
+      // the project brings its own furniture: the sample pieces would only get in the way
+      setFurniture([]);
+      if (selectedType === 'furniture') setSelectedType(null);
+      // and its own lights: they replace the sample lamps (the toast can undo it)
+      if (lights.length) {
+        const next = lampsFromModelLights(lights, ceiling);
+        applyLamps(next, fill(t.importLightsToast, { k: next.length }));
+        setSelectedId(next[0].id);
+        setSelectedType('lamp');
+      }
+      setImportOpen(true);
+      setImportStatus({ loading: false, error: null });
+    } catch (err) {
+      if (err?.code !== 'unsupported') console.error('[import]', err);
+      setImportStatus({ loading: false, error: err?.code === 'unsupported' ? 'unsupported' : 'failed' });
+    }
+  };
+
+  const updateModelSetup = (patch) => {
+    if (!importedModel) return;
+    const setup = { ...importedModel.setup, ...patch };
+    const { size, lights, ceiling } = buildModelRoot(importedModel.object, setup);
+    setImportedModel({ ...importedModel, setup, size, lights, ceiling });
+    if (room.shape === 'imported') fitRoomToModel(size, ceiling);
+    // the project's lamps move with the model (the user's color and brightness stay)
+    if (lights.length && lamps.some((l) => l.id.startsWith('proj-'))) {
+      const moved = lampsFromModelLights(lights, ceiling);
+      setLamps((prev) =>
+        prev.map((l) => {
+          const m = moved.find((x) => x.id === l.id);
+          return m ? { ...l, x: m.x, z: m.z, heightOffset: m.heightOffset } : l;
+        })
+      );
+    }
+  };
+
+  // The project's own lights become lamps (ids "proj-<n>", so they can follow the model when
+  // its unit, axis or floor change). The type comes from the light's name when it says
+  // (pendente, spot, plafon, piso…), otherwise from its height: at the ceiling → spot/plafon,
+  // low → floor lamp, in between → pendant at that height. No usable lumens in files: 800 lm.
+  const lampsFromModelLights = (found, ceilingRaw) => {
+    const ceiling = ceilingRaw ? Math.min(4.2, Math.max(2.3, Math.floor(ceilingRaw * 20) / 20)) : room.height;
+    return found.map((l, i) => {
+      let type = lampTypeFromName(l.name);
+      if (!type) {
+        if (l.y >= ceiling - 0.35) type = l.spot ? 'spot' : 'plafon';
+        else if (l.y < 1.2) type = 'floor_lamp';
+        else type = 'pendant';
+      }
+      const heightOffset =
+        type === 'pendant' ? Math.max(-1, Math.min(0.3, Number((l.y - (ceiling - 0.65)).toFixed(2)))) : 0;
+      const customName = usefulLightName(l.name);
+      return {
+        ...(customName ? { customName } : {}),
+        id: `proj-${i}`,
+        indexNum: i + 1,
+        type,
+        x: l.x,
+        z: l.z,
+        isOn: true,
+        kelvin: kelvinFromColor(l.color),
+        watts: lumensToWatts(800),
+        lumens: 800,
+        scale: 1,
+        heightOffset,
+      };
+    });
+  };
+
+  // Back from a (usually bigger) project to a built-in room: lamps outside it come inside
+  const leaveImported = (shape) => {
+    const width = clampDim(room.width);
+    const depth = clampDim(room.depth);
+    const hw = width / 2 - 0.35;
+    const hd = depth / 2 - 0.35;
+    setRoom((r) => ({ ...r, shape, width, depth }));
+    setLamps((prev) =>
+      prev.map((l) => {
+        const x = Math.max(-hw, Math.min(hw, l.x));
+        const z = Math.max(-hd, Math.min(hd, l.z));
+        return x === l.x && z === l.z ? l : { ...l, x: Number(x.toFixed(2)), z: Number(z.toFixed(2)) };
+      })
+    );
+  };
+
+  const handleRemoveModel = () => {
+    disposeModel(importedModel?.object);
+    setImportedModel(null);
+    if (room.shape === 'imported') leaveImported('rectangular');
+  };
+
+  const handleShape = (id) => {
+    if (id === 'imported') {
+      if (importedModel) fitRoomToModel(importedModel.size, importedModel.ceiling);
+      return;
+    }
+    if (room.shape === 'imported') leaveImported(id);
+    else setRoom((r) => ({ ...r, shape: id }));
+  };
+
   // Load architectural room preset
   const handleLoadPreset = (presetKey) => {
     const p = SCENE_PRESETS[presetKey];
@@ -586,7 +739,23 @@ export default function App() {
   return (
     <div className="relative w-screen h-screen max-lg:h-dvh bg-slate-950 overflow-hidden select-none flex max-lg:flex-col">
       {/* 3D Interactive Viewport */}
-      <div className="flex-1 h-full max-lg:h-auto min-h-0 relative">
+      <div
+        className="flex-1 h-full max-lg:h-auto min-h-0 relative"
+        onDragOver={(e) => {
+          if (!Array.from(e.dataTransfer?.types || []).includes('Files')) return;
+          e.preventDefault();
+          setSceneDrop(true);
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget)) setSceneDrop(false);
+        }}
+        onDrop={(e) => {
+          if (!e.dataTransfer?.files?.length) return;
+          e.preventDefault();
+          setSceneDrop(false);
+          handleImportFiles(e.dataTransfer.files);
+        }}
+      >
         <Scene3D
           room={room}
           lamps={localizedLamps}
@@ -604,6 +773,7 @@ export default function App() {
           cameraView={cameraView}
           hideUIForPhoto={hideUIForPhoto}
           canvasRef={canvasRef}
+          importedModel={importedModel}
         />
 
         {/* Camera Flash Overlay */}
@@ -673,6 +843,22 @@ export default function App() {
                 </option>
               ))}
             </select>
+
+            <button
+              type="button"
+              onClick={() => setImportOpen((o) => !o)}
+              title={t.importTitle}
+              aria-label={t.importTitle}
+              aria-expanded={importOpen}
+              className={`flex items-center gap-1.5 h-9 px-3.5 whitespace-nowrap max-sm:h-10 max-sm:w-10 max-sm:px-0 max-sm:justify-center rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
+                importOpen
+                  ? 'bg-slate-800 border-amber-400/70 text-amber-300'
+                  : 'bg-slate-900 border-slate-800 text-slate-200 hover:text-white'
+              }`}
+            >
+              <Upload className="w-4 h-4" />
+              <span className="max-sm:hidden lg:max-xl:hidden">{t.importShort}</span>
+            </button>
 
             <button
               onClick={handleTakePhoto}
@@ -789,11 +975,34 @@ export default function App() {
           </div>
         </header>
 
+        {/* Import project panel (top bar button) */}
+        <ImportPanel
+          open={importOpen && !hideUIForPhoto}
+          onClose={() => setImportOpen(false)}
+          t={t}
+          model={importedModel}
+          loading={importStatus.loading}
+          error={importStatus.error}
+          onFiles={handleImportFiles}
+          onUpdate={updateModelSetup}
+          onRemove={handleRemoveModel}
+          projectLamps={lamps.filter((l) => l.id.startsWith('proj-')).length}
+        />
+
+        {/* Dropping a project file anywhere on the 3D view imports it */}
+        {sceneDrop && (
+          <div className="absolute inset-3 z-40 rounded-3xl border-2 border-dashed border-amber-300 bg-amber-500/10 backdrop-blur-sm flex items-center justify-center pointer-events-none">
+            <span className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900/90 text-amber-200 text-sm font-semibold">
+              <Upload className="w-4 h-4" /> {t.importDropHere}
+            </span>
+          </div>
+        )}
+
         {/* Undo toast for the automatic changes ("Adjust", "Add N lights") */}
         {toast && (
           <div
             role="status"
-            className="absolute left-1/2 -translate-x-1/2 bottom-16 max-lg:bottom-3 z-30 flex items-center gap-3 pl-4 pr-1.5 py-1.5 rounded-2xl bg-slate-900/95 border border-slate-700 shadow-2xl text-[13px] text-slate-100 max-w-[calc(100%-1.5rem)]"
+            className="absolute left-1/2 -translate-x-1/2 bottom-16 max-lg:bottom-3 z-50 flex items-center gap-3 pl-4 pr-1.5 py-1.5 rounded-2xl bg-slate-900/95 border border-slate-700 shadow-2xl text-[13px] text-slate-100 max-w-[calc(100%-1.5rem)]"
           >
             <span className="truncate">{toast.message}</span>
             <button
@@ -1309,15 +1518,16 @@ export default function App() {
                 <label className="text-xs font-semibold text-slate-200 block">
                   {t.shapeShort}
                 </label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className={`grid gap-2 ${importedModel ? 'grid-cols-4' : 'grid-cols-3'}`}>
                   {[
                     { id: 'rectangular', label: t.shapeRect },
                     { id: 'l-shape', label: t.shapeL },
                     { id: 'octagonal', label: t.shapeOct },
+                    ...(importedModel ? [{ id: 'imported', label: t.shapeImported }] : []),
                   ].map((sh) => (
                     <button
                       key={sh.id}
-                      onClick={() => setRoom((r) => ({ ...r, shape: sh.id }))}
+                      onClick={() => handleShape(sh.id)}
                       className={`py-2 px-2 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
                         room.shape === sh.id
                           ? 'bg-amber-500/20 border-amber-400 text-amber-300'
@@ -1341,6 +1551,18 @@ export default function App() {
                   </span>
                 </div>
 
+                {room.shape === 'imported' ? (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-400">{t.modelSize}</span>
+                    <span className="font-semibold text-white">
+                      {room.width} × {room.depth} m
+                    </span>
+                  </div>
+                ) : null}
+                {room.shape === 'imported' ? (
+                  <p className="text-[10px] text-slate-500 leading-snug">{t.importLuxNote}</p>
+                ) : (
+                <>
                 <div className="space-y-1">
                   <div className="flex justify-between text-xs">
                     <span className="text-slate-400">{t.widthX}</span>
@@ -1376,6 +1598,8 @@ export default function App() {
                     className="w-full accent-amber-400 cursor-pointer"
                   />
                 </div>
+                </>
+                )}
 
                 <div className="space-y-1">
                   <div className="flex justify-between text-xs">

@@ -3,6 +3,7 @@ import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import RoomMesh from './RoomMesh';
+import ImportedModel from './ImportedModel';
 import Lamp3D from './Lamp3D';
 import Furniture3D from './Furniture3D';
 import {
@@ -25,14 +26,15 @@ function CameraController({ cameraView, room, orbitEnabled }) {
     } else if (cameraView === 'front') {
       camera.position.set(0, room.height * 0.62, maxDim * 1.35);
     } else {
-      // Isometric / Perspective 3D
-      camera.position.set(maxDim * 0.95, room.height * 1.45, maxDim * 1.15);
+      // Isometric / Perspective 3D (an imported project has no cutaway walls: look from higher up)
+      const y = room.shape === 'imported' ? maxDim * 1.05 : room.height * 1.45;
+      camera.position.set(maxDim * 0.95, y, maxDim * 1.15);
     }
     if (controlsRef.current) {
       controlsRef.current.target.set(0, room.height * 0.3, 0);
       controlsRef.current.update();
     }
-  }, [cameraView, room.width, room.depth, room.height, camera]);
+  }, [cameraView, room.width, room.depth, room.height, room.shape, camera]);
 
   return (
     <OrbitControls
@@ -40,7 +42,7 @@ function CameraController({ cameraView, room, orbitEnabled }) {
       enabled={orbitEnabled}
       makeDefault
       minDistance={2}
-      maxDistance={22}
+      maxDistance={Math.max(22, Math.max(room.width, room.depth) * 3)}
       maxPolarAngle={Math.PI / 2 - 0.02}
       enableDamping
       dampingFactor={0.07}
@@ -65,6 +67,7 @@ export default function Scene3D({
   cameraView,
   hideUIForPhoto,
   canvasRef,
+  importedModel,
 }) {
   const [orbitEnabled, setOrbitEnabled] = useState(true);
 
@@ -120,12 +123,21 @@ export default function Scene3D({
           orbitEnabled={orbitEnabled}
         />
 
-        {/* Room Walls & Floor */}
-        <RoomMesh
-          room={room}
-          showGrid={showGrid && !hideUIForPhoto}
-          onSelectEmpty={onSelectEmpty}
-        />
+        {/* Room Walls & Floor — or the project imported by the user */}
+        {room.shape === 'imported' && importedModel ? (
+          <ImportedModel
+            model={importedModel}
+            room={room}
+            showGrid={showGrid && !hideUIForPhoto}
+            onSelectEmpty={onSelectEmpty}
+          />
+        ) : (
+          <RoomMesh
+            room={room}
+            showGrid={showGrid && !hideUIForPhoto}
+            onSelectEmpty={onSelectEmpty}
+          />
+        )}
 
         {/* Lamps */}
         {lamps.map((lamp) => (
