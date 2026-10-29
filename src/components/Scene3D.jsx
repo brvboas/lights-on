@@ -12,6 +12,8 @@ import {
   indirectLux,
 } from '../utils/lightingPhysics';
 
+const MAX_SHADOW_LIGHTS = 4;
+
 function CameraController({ cameraView, room, orbitEnabled }) {
   const { camera } = useThree();
   const controlsRef = useRef();
@@ -68,6 +70,21 @@ export default function Scene3D({
 
   // Ambient = light bouncing off walls/ceiling (grows with the lamps' lumens) + a small
   // day/night base, so dim rooms look dim and bright rooms look bright.
+  // Point-light shadows cost 6 renders each and a texture unit in every material: only the
+  // brightest MAX_SHADOW_LIGHTS lit lamps cast them (the rest still light the room), so a room
+  // with many lights stays fast and never exceeds WebGL's texture-unit limit (16 on phones).
+  const shadowIds = useMemo(
+    () =>
+      new Set(
+        lamps
+          .filter((l) => l.isOn)
+          .sort((a, b) => b.lumens - a.lumens)
+          .slice(0, MAX_SHADOW_LIGHTS)
+          .map((l) => l.id)
+      ),
+    [lamps]
+  );
+
   const ambientLux = useMemo(() => {
     const lumens = lamps.reduce((acc, l) => acc + (l.isOn ? l.lumens : 0), 0);
     return indirectLux(lumens, room) * INDIRECT_AMBIENT_SHARE + ambientLevel * BASE_AMBIENT_LUX;
@@ -122,6 +139,7 @@ export default function Scene3D({
             onTogglePower={onToggleLampPower}
             setOrbitEnabled={setOrbitEnabled}
             hideUI={hideUIForPhoto}
+            castsShadow={shadowIds.has(lamp.id)}
           />
         ))}
 

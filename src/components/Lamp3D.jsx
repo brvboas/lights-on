@@ -13,6 +13,7 @@ export default function Lamp3D({
   onTogglePower,
   setOrbitEnabled,
   hideUI,
+  castsShadow = true,
 }) {
   const { id, name, type, x, z, isOn, kelvin, lumens, scale, heightOffset = 0 } = lamp;
   const [isDragging, setIsDragging] = useState(false);
@@ -114,7 +115,7 @@ export default function Lamp3D({
         // blurry, imprecise shadows. At 2.5× the room size the cut-off barely dims the light.
         distance={Math.max(room.width, room.depth) * 2.5}
         decay={2}
-        castShadow
+        castShadow={castsShadow}
         shadow-mapSize-width={1024}
         shadow-mapSize-height={1024}
         shadow-bias={-0.0015}

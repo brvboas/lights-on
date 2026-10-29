@@ -15,16 +15,18 @@ import {
   Moon,
   Download,
   X,
-  Check,
   Move,
   Crosshair,
   Globe,
   ChevronDown,
   Info,
+  MoreHorizontal,
+  ChevronRight,
 } from 'lucide-react';
 import Scene3D from './components/Scene3D';
 import AuthorCredit from './components/AuthorCredit';
 import MethodologyModal from './components/MethodologyModal';
+import LightingCard, { fill } from './components/LightingCard';
 import {
   kelvinToHex,
   WATT_PRESETS,
@@ -34,13 +36,18 @@ import {
   WALL_COLORS,
   FURNITURE_CATALOG,
   SCENE_PRESETS,
-  ROOM_TYPES,
   calculateRoomArea,
   roomGeometry,
   wallReflectance,
 } from './utils/lightingPhysics';
-import { estimateLux, roomIndex, utilizationFactor, MAINTENANCE_FACTOR, ROOM_LUX } from './utils/illuminance';
+import { estimateLux, roomIndex, utilizationFactor, ROOM_LUX } from './utils/illuminance';
 import { TRANSLATIONS } from './utils/i18n';
+import {
+  planLightAdjustment,
+  placeNewLamps,
+  LAMP_MIN_LM,
+  LAMP_MAX_LM,
+} from './utils/lightAdjust';
 import { HUB_SLUG } from '../seo/routes.mjs';
 
 const LANGS = ['pt', 'en', 'es'];
@@ -80,12 +87,10 @@ export default function App() {
   }, [lang, t]);
 
   // Language picked by hand: remember it, so "/" opens in that language next time
-  const cycleLang = () =>
-    setLang((l) => {
-      const next = LANGS[(LANGS.indexOf(l) + 1) % LANGS.length];
-      document.cookie = `lang=${next}; path=/; max-age=31536000; samesite=lax`;
-      return next;
-    });
+  const chooseLang = (code) => {
+    document.cookie = `lang=${code}; path=/; max-age=31536000; samesite=lax`;
+    setLang(code);
+  };
 
   const [room, setRoom] = useState(SCENE_PRESETS.living_room.room);
   const [lamps, setLamps] = useState(SCENE_PRESETS.living_room.lamps);
@@ -110,8 +115,19 @@ export default function App() {
   const suppressClick = useRef(false);
 
   const canvasRef = useRef(null);
-  const luxPanelRef = useRef(null);
   const [showMethod, setShowMethod] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false); // top-right "⋯" menu
+  const moreRef = useRef(null);
+  const [advOpen, setAdvOpen] = useState(false); // lamp tab: advanced settings
+  const [finishesOpen, setFinishesOpen] = useState(false); // room tab: wall/floor
+  const [toast, setToast] = useState(null); // { message, lamps (snapshot to undo), id }
+  const [showHints, setShowHints] = useState(() => {
+    try {
+      return localStorage.getItem('lumina-hints') !== 'off';
+    } catch {
+      return true;
+    }
+  });
 
   // Dynamically localize lamp and furniture names whenever language changes
   const localizedLamps = useMemo(() => {
@@ -199,6 +215,13 @@ export default function App() {
     }
     return { label: t.luxIntense, color: 'text-purple-300', bg: 'bg-purple-950/70' };
   }, [averageLux, t]);
+  const luxMoodShort = { ...luxMood, short: luxMood.label.replace(/\s*\(.*\)$/, '') };
+
+  // Plan for the "Adjust to recommended" / "Add N lights" action of the lighting card
+  const plan = useMemo(
+    () => planLightAdjustment(lamps, photometry.geometry, photometry.rho, luxTarget.lux),
+    [lamps, photometry, luxTarget]
+  );
 
   // Assessment: how the lux compares with the recommendation for the chosen room use
   const luxAssessment = useMemo(() => {
@@ -465,6 +488,101 @@ export default function App() {
 
   const anyLampOn = lamps.some((l) => l.isOn);
 
+  const cameraViews = [
+    { id: 'perspective', label: t.cam3d },
+    { id: 'top', label: t.camTop },
+    { id: 'front', label: t.camFront },
+  ];
+
+  // Undo toast: shows for 10 s after an automatic change
+  useEffect(() => {
+    if (!toast) return undefined;
+    const id = window.setTimeout(() => setToast(null), 10000);
+    return () => window.clearTimeout(id);
+  }, [toast]);
+
+  // Esc or a tap/click anywhere outside the action bar closes the "⋯" menu
+  useEffect(() => {
+    if (!moreOpen) return undefined;
+    const onKey = (e) => e.key === 'Escape' && setMoreOpen(false);
+    const onDown = (e) => {
+      if (moreRef.current && !moreRef.current.contains(e.target)) setMoreOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    document.addEventListener('pointerdown', onDown);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onDown);
+    };
+  }, [moreOpen]);
+
+  const luxOf = (list) =>
+    Math.round(
+      estimateLux(
+        list.reduce((acc, l) => acc + (l.isOn ? l.lumens : 0), 0),
+        photometry.geometry,
+        photometry.rho
+      )
+    );
+
+  const applyLamps = (next, message) => {
+    setToast({ message, lamps, id: Date.now() });
+    setLamps(next);
+  };
+
+  // Scale the lamps to the middle of the recommended range (each within 200–4500 lm)
+  const handleAdjustLights = () => {
+    if (!plan.changes) return;
+    const next = lamps.map((l) => (plan.changes[l.id] ? { ...l, ...plan.changes[l.id] } : l));
+    applyLamps(next, fill(t.adjustedToast, { lux: luxOf(next) }));
+  };
+
+  // Add ceiling lights spread over the room, then scale everything to the range
+  const handleAddLights = (count) => {
+    // all lights off: the plan counted them, so switch them back on too
+    const base = lamps.some((l) => l.isOn) ? lamps : lamps.map((l) => ({ ...l, isOn: true }));
+    const positions = placeNewLamps(room, base, count);
+    const ref = base.find((l) => l.id === selectedId) || base[0];
+    const stamp = Date.now();
+    const added = positions.map((p, i) => ({
+      id: `lamp-${stamp}-${i}`,
+      indexNum: base.length + i + 1,
+      type: 'plafon',
+      x: p.x,
+      z: p.z,
+      isOn: true,
+      kelvin: ref?.kelvin || 3000,
+      watts: lumensToWatts(LAMP_MAX_LM),
+      lumens: LAMP_MAX_LM,
+      scale: 1,
+      heightOffset: 0,
+    }));
+    let next = [...base, ...added];
+    const p2 = planLightAdjustment(next, photometry.geometry, photometry.rho, luxTarget.lux);
+    if (p2.changes) next = next.map((l) => (p2.changes[l.id] ? { ...l, ...p2.changes[l.id] } : l));
+    applyLamps(
+      next,
+      fill(added.length === 1 ? t.addedToast1 : t.addedToast, { k: added.length, lux: luxOf(next) })
+    );
+  };
+
+  const handleUndo = () => {
+    if (!toast) return;
+    const prev = toast.lamps;
+    setLamps(prev);
+    if (!prev.some((l) => l.id === selectedId)) setSelectedId(prev[0]?.id || null);
+    setToast(null);
+  };
+
+  const hideHints = () => {
+    setShowHints(false);
+    try {
+      localStorage.setItem('lumina-hints', 'off');
+    } catch {
+      // private mode / blocked storage: just hide for this visit
+    }
+  };
+
   return (
     <div className="relative w-screen h-screen max-lg:h-dvh bg-slate-950 overflow-hidden select-none flex max-lg:flex-col">
       {/* 3D Interactive Viewport */}
@@ -493,178 +611,204 @@ export default function App() {
           <div className="absolute inset-0 bg-white z-50 pointer-events-none animate-pulse opacity-80" />
         )}
 
-        {/* Top Floating Bar — Brand + Photometric HUD + Actions */}
-        <header className="absolute top-4 left-4 right-4 z-20 flex flex-wrap items-center justify-between gap-3 pointer-events-none max-sm:top-2.5 max-sm:left-2.5 max-sm:right-2.5 max-sm:flex-nowrap max-sm:gap-2">
-          {/* Brand & Live Photometry */}
-          <div className="flex items-center gap-3 bg-slate-900/85 backdrop-blur-xl border border-slate-800/90 px-4 py-2.5 rounded-2xl shadow-2xl pointer-events-auto max-sm:gap-1.5 max-sm:p-1 max-sm:rounded-xl">
-            <div className="flex items-center gap-2.5 pr-3 border-r border-slate-800 max-sm:pr-0 max-sm:border-r-0">
-              <div className="w-9 h-9 max-sm:w-7 max-sm:h-7 max-sm:rounded-lg rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-slate-950 shadow-lg shadow-amber-500/25">
-                <Lightbulb className="w-5 h-5 max-sm:w-4 max-sm:h-4 stroke-[2.2]" />
-              </div>
-              <div className="max-sm:hidden">
-                <h1 className="text-sm font-bold tracking-tight text-white flex items-center gap-1.5">
-                  LuminaStudio{' '}
-                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                    3D
-                  </span>
-                </h1>
-                <p className="text-[11px] text-slate-400">{t.subtitle}</p>
-              </div>
+        {/* Top bar — brand on the left; lights, camera, photo and the "more" menu on the right */}
+        <header className="absolute top-4 left-4 right-4 z-30 flex items-center justify-between gap-3 pointer-events-none max-sm:top-2.5 max-sm:left-2.5 max-sm:right-2.5 max-sm:gap-2">
+          <div className="flex items-center gap-2.5 bg-slate-900/85 backdrop-blur-xl border border-slate-800/90 pl-2 pr-3.5 py-2 rounded-2xl shadow-2xl pointer-events-auto max-sm:p-0 max-sm:bg-transparent max-sm:border-0 max-sm:shadow-none max-sm:backdrop-blur-none">
+            <div className="w-9 h-9 max-sm:w-10 max-sm:h-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-slate-950 shadow-lg shadow-amber-500/25">
+              <Lightbulb className="w-5 h-5 stroke-[2.2]" />
             </div>
-
-            {/* Mobile/tablet: compact illuminance chip (the full metrics only fit on xl) */}
-            {/* Tap → opens the Room tab on the lux panel (touch has no hover title) */}
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('room');
-                setSheetOpen(true);
-                setTimeout(
-                  () => luxPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }),
-                  320
-                );
-              }}
-              className={`lg:hidden px-2 py-1 max-sm:px-1.5 max-sm:py-0.5 rounded-lg border border-white/10 text-[11px] font-bold whitespace-nowrap cursor-pointer ${luxMood.bg} ${luxMood.color}`}
-              title={`${luxMood.label} • ${luxAssessment.label} (${luxAssessment.range})`}
-              aria-label={`${averageLux} lux — ${luxMood.label}, ${luxAssessment.label} (${luxAssessment.range})`}
-            >
-              {averageLux} lux <span className={luxAssessment.color}>{luxAssessment.icon}</span>
-            </button>
-
-            {/* Live Photometric Metrics */}
-            <div className="hidden xl:flex items-center gap-4 text-xs px-1">
-              <div>
-                <span className="text-slate-400 block text-[10px] uppercase tracking-wider">
-                  {t.totalFlux}
-                </span>
-                <span className="font-semibold text-amber-300">{totalLumens} lm</span>
-                <span className="text-slate-500 ml-1">({totalWatts}W)</span>
-              </div>
-              <div>
-                <span className="text-slate-400 block text-[10px] uppercase tracking-wider">
-                  {t.usefulArea}
-                </span>
-                <span className="font-semibold text-slate-200">{roomArea} m²</span>
-              </div>
-              <div>
-                <span className="text-slate-400 block text-[10px] uppercase tracking-wider">
-                  {t.avgIlluminance}
-                </span>
-                <span className="font-bold text-white">{averageLux} lux</span>
-              </div>
-              {/* Fixed width, short labels: the bar must not grow with the lux and push the actions down */}
-              <div
-                className={`w-40 px-2.5 py-1 rounded-lg border border-white/10 text-[11px] font-medium leading-tight ${luxMood.bg} ${luxMood.color}`}
-                title={`${luxMood.label} • ${luxAssessment.label} (${luxAssessment.range})`}
-              >
-                <span className="block truncate">{luxMood.label.replace(/\s*\(.*\)$/, '')}</span>
-                <span className={`block truncate text-[10px] font-normal ${luxAssessment.color}`}>
-                  {luxAssessment.icon} {luxAssessment.short} · {t.recShort} {luxAssessment.min}–{luxAssessment.max} lx
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowMethod(true)}
-                title={t.methodBtn}
-                aria-label={t.methodBtn}
-                className="-ml-2 p-1.5 rounded-lg text-slate-400 hover:text-amber-300 hover:bg-slate-800 cursor-pointer"
-              >
-                <Info className="w-4 h-4" />
-              </button>
-            </div>
+            <h1 className="max-sm:sr-only text-sm font-bold tracking-tight text-white flex items-center gap-1.5">
+              LuminaStudio
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                3D
+              </span>
+            </h1>
           </div>
 
-          {/* Right Quick Action Bar */}
-          <div className="flex items-center gap-2 bg-slate-900/85 backdrop-blur-xl border border-slate-800/90 p-1.5 rounded-2xl shadow-2xl pointer-events-auto max-sm:gap-1 max-sm:p-1 max-sm:rounded-xl">
-            {/* Master Power Toggle */}
+          <div
+            ref={moreRef}
+            className="relative flex items-center gap-2 bg-slate-900/85 backdrop-blur-xl border border-slate-800/90 p-1.5 rounded-2xl shadow-2xl pointer-events-auto max-sm:gap-1.5 max-sm:p-1 max-sm:rounded-xl"
+          >
             <button
               onClick={handleToggleAllLamps}
-              className={`flex items-center gap-1.5 px-3 py-2 max-sm:p-1.5 max-sm:rounded-lg rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              aria-label={anyLampOn ? t.lightsOn : t.lightsOff}
+              className={`flex items-center gap-1.5 h-9 px-3 whitespace-nowrap max-sm:h-10 max-sm:w-10 max-sm:px-0 max-sm:justify-center rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                 anyLampOn
                   ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 hover:bg-amber-400'
                   : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
               }`}
               title={t.toggleAllTitle}
             >
-              {anyLampOn ? (
-                <Lightbulb className="w-4 h-4" />
-              ) : (
-                <LightbulbOff className="w-4 h-4" />
-              )}
-              <span className="max-sm:hidden">{anyLampOn ? t.lightsOn : t.lightsOff}</span>
+              {anyLampOn ? <Lightbulb className="w-4 h-4" /> : <LightbulbOff className="w-4 h-4" />}
+              <span className="max-sm:hidden lg:max-xl:hidden">{anyLampOn ? t.lightsOn : t.lightsOff}</span>
             </button>
 
-            {/* Camera Angles */}
+            {/* Camera: segmented on larger screens, native picker on phones */}
             <div className="hidden sm:flex items-center bg-slate-950/70 rounded-xl p-0.5 border border-slate-800">
-              {[
-                { id: 'perspective', label: t.cam3d },
-                { id: 'top', label: t.camTop },
-                { id: 'front', label: t.camFront },
-              ].map((v) => (
+              {cameraViews.map((v) => (
                 <button
                   key={v.id}
                   onClick={() => setCameraView(v.id)}
+                  aria-pressed={cameraView === v.id}
                   className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                    cameraView === v.id
-                      ? 'bg-slate-800 text-white shadow'
-                      : 'text-slate-400 hover:text-slate-200'
+                    cameraView === v.id ? 'bg-slate-800 text-white shadow' : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
                   {v.label}
                 </button>
               ))}
             </div>
-
-            {/* Grid Toggle */}
-            <button
-              onClick={() => setShowGrid((g) => !g)}
-              className={`p-2 max-sm:p-1.5 max-sm:rounded-lg rounded-xl border transition-all cursor-pointer ${
-                showGrid
-                  ? 'bg-slate-800 text-sky-400 border-sky-500/40'
-                  : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
-              }`}
-              title={t.gridTitle}
+            <label className="sm:hidden sr-only" htmlFor="camera-view">
+              {t.cameraLabel}
+            </label>
+            <select
+              id="camera-view"
+              value={cameraView}
+              onChange={(e) => setCameraView(e.target.value)}
+              className="sm:hidden h-10 pl-2 pr-6 rounded-lg bg-slate-800 border border-slate-700 text-white text-xs font-semibold"
             >
-              <GridIcon className="w-4 h-4" />
-            </button>
+              {cameraViews.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.label}
+                </option>
+              ))}
+            </select>
 
-            {/* Night / Twilight Ambient Toggle */}
-            <button
-              onClick={() => setAmbientLevel((a) => (a < 0.1 ? 0.22 : 0.03))}
-              className="p-2 max-sm:p-1.5 max-sm:rounded-lg rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-amber-300 transition-all cursor-pointer"
-              title={t.ambientTitle}
-            >
-              {ambientLevel < 0.1 ? (
-                <Moon className="w-4 h-4 text-indigo-400" />
-              ) : (
-                <Sun className="w-4 h-4 text-amber-300" />
-              )}
-            </button>
-
-            {/* Language Toggle (PT → EN → ES) */}
-            <button
-              onClick={cycleLang}
-              className="flex items-center gap-1 px-2.5 py-2 max-sm:px-1.5 max-sm:py-1.5 max-sm:rounded-lg rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-bold text-slate-200 transition-all cursor-pointer"
-              title={t.switchLangTitle}
-            >
-              <Globe className="w-3.5 h-3.5 text-amber-400 max-sm:hidden" />
-              <span>{lang.toUpperCase()}</span>
-            </button>
-
-            {/* Take Photo Button */}
             <button
               onClick={handleTakePhoto}
               title={t.takePhoto}
-              className="flex items-center gap-1.5 px-3.5 py-2 max-sm:p-1.5 max-sm:rounded-lg rounded-xl bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-400 hover:to-indigo-400 text-white text-xs font-semibold shadow-lg shadow-sky-500/20 transition-all cursor-pointer"
+              aria-label={t.takePhoto}
+              className="flex items-center gap-1.5 h-9 px-3.5 whitespace-nowrap max-sm:h-10 max-sm:w-10 max-sm:px-0 max-sm:justify-center rounded-xl bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-400 hover:to-indigo-400 text-white text-xs font-semibold shadow-lg shadow-sky-500/20 transition-all cursor-pointer"
             >
               <Camera className="w-4 h-4" />
-              <span className="max-sm:hidden">{t.takePhoto}</span>
+              <span className="max-sm:hidden lg:max-xl:hidden">{t.takePhoto}</span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => setMoreOpen((o) => !o)}
+              aria-label={t.moreOptions}
+              aria-expanded={moreOpen}
+              aria-haspopup="menu"
+              title={t.moreOptions}
+              className={`h-9 w-9 max-sm:h-10 max-sm:w-10 flex items-center justify-center rounded-xl border transition-all cursor-pointer ${
+                moreOpen
+                  ? 'bg-slate-800 border-amber-400/70 text-amber-300'
+                  : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white'
+              }`}
+            >
+              <MoreHorizontal className="w-5 h-5" />
+            </button>
+
+            {moreOpen && (
+              <>
+                <div
+                  role="menu"
+                  className="absolute right-0 top-full mt-2 z-10 w-72 max-w-[calc(100vw-1.25rem)] rounded-2xl border border-slate-700 bg-slate-900 p-2 shadow-2xl space-y-1"
+                >
+                  <button
+                    role="menuitemcheckbox"
+                    aria-checked={showGrid}
+                    onClick={() => setShowGrid((g) => !g)}
+                    className="w-full h-11 flex items-center justify-between px-3 rounded-xl hover:bg-slate-800 text-[13px] text-slate-100 cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2">
+                      <GridIcon className="w-4 h-4 text-sky-400" /> {t.gridLabel}
+                    </span>
+                    <span className={`relative w-9 h-5 rounded-full transition-colors ${showGrid ? 'bg-sky-500' : 'bg-slate-700'}`}>
+                      <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-slate-950 transition-all ${showGrid ? 'left-[18px]' : 'left-0.5'}`} />
+                    </span>
+                  </button>
+
+                  <div className="flex items-center justify-between h-11 px-3 text-[13px] text-slate-100">
+                    <span className="flex items-center gap-2">
+                      {ambientLevel < 0.1 ? <Moon className="w-4 h-4 text-indigo-400" /> : <Sun className="w-4 h-4 text-amber-300" />}
+                      {t.ambientLabel}
+                    </span>
+                    <div className="flex rounded-lg border border-slate-700 p-0.5">
+                      {[
+                        { id: 'day', label: t.day, level: 0.22, active: ambientLevel >= 0.1 },
+                        { id: 'night', label: t.night, level: 0.03, active: ambientLevel < 0.1 },
+                      ].map((o) => (
+                        <button
+                          key={o.id}
+                          role="menuitemradio"
+                          aria-checked={o.active}
+                          onClick={() => setAmbientLevel(o.level)}
+                          className={`h-8 px-2.5 rounded-md text-xs font-semibold cursor-pointer ${
+                            o.active ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between h-11 px-3 text-[13px] text-slate-100">
+                    <span className="flex items-center gap-2">
+                      <Globe className="w-4 h-4 text-amber-400" /> {t.languageLabel}
+                    </span>
+                    <div className="flex rounded-lg border border-slate-700 p-0.5">
+                      {LANGS.map((code) => (
+                        <button
+                          key={code}
+                          role="menuitemradio"
+                          aria-checked={lang === code}
+                          onClick={() => chooseLang(code)}
+                          className={`h-8 w-9 rounded-md text-xs font-bold cursor-pointer ${
+                            lang === code ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          {code.toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setMoreOpen(false);
+                      setShowMethod(true);
+                    }}
+                    className="w-full h-11 flex items-center gap-2 px-3 rounded-xl hover:bg-slate-800 text-[13px] font-semibold text-amber-300 cursor-pointer"
+                  >
+                    <Info className="w-4 h-4" /> {t.methodBtn}
+                  </button>
+
+                  <div className="border-t border-slate-800 mt-1 pt-2 px-3 pb-1 space-y-1 text-[11px] leading-snug text-slate-400">
+                    <span className="block font-semibold text-slate-300">{t.helpTitle}</span>
+                    <span className="block"><strong className="text-slate-200">{t.helpDrag}</strong> {t.helpDragSub}</span>
+                    <span className="block"><strong className="text-slate-200">{t.helpDblClick}</strong> {t.helpDblClickSub}</span>
+                    <span className="block"><strong className="text-slate-200">{t.helpOrbit}</strong> {t.helpOrbitSub}</span>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </header>
 
-        {/* Bottom Interactive Help Pill */}
-        <div className="absolute bottom-4 left-4 z-10 pointer-events-none hidden lg:flex items-center gap-3 bg-slate-900/80 backdrop-blur-md border border-slate-800/80 px-3.5 py-2 rounded-xl text-[11px] text-slate-300">
+        {/* Undo toast for the automatic changes ("Adjust", "Add N lights") */}
+        {toast && (
+          <div
+            role="status"
+            className="absolute left-1/2 -translate-x-1/2 bottom-16 max-lg:bottom-3 z-30 flex items-center gap-3 pl-4 pr-1.5 py-1.5 rounded-2xl bg-slate-900/95 border border-slate-700 shadow-2xl text-[13px] text-slate-100 max-w-[calc(100%-1.5rem)]"
+          >
+            <span className="truncate">{toast.message}</span>
+            <button
+              type="button"
+              onClick={handleUndo}
+              className="shrink-0 h-9 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 font-semibold cursor-pointer"
+            >
+              {t.undo}
+            </button>
+          </div>
+        )}
+
+        {/* Bottom help pill (desktop) — can be closed; the same tips stay in the "⋯" menu */}
+        {showHints && (
+        <div className="absolute bottom-4 left-4 z-10 hidden xl:flex items-center gap-3 bg-slate-900/80 backdrop-blur-md border border-slate-800/80 pl-3.5 pr-1.5 py-1.5 rounded-xl text-[11px] text-slate-300">
           <span className="flex items-center gap-1.5">
             <Move className="w-3.5 h-3.5 text-amber-400" />
             <strong>{t.helpDrag}</strong> {t.helpDragSub}
@@ -677,7 +821,17 @@ export default function App() {
           <span>
             <strong>{t.helpOrbit}</strong> {t.helpOrbitSub}
           </span>
+          <button
+            type="button"
+            onClick={hideHints}
+            aria-label={t.dismissHint}
+            title={t.dismissHint}
+            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-slate-800 cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
+        )}
       </div>
 
       {/* Right Control Studio Sidebar */}
@@ -706,6 +860,34 @@ export default function App() {
         >
           <span className="w-10 h-1 rounded-full bg-slate-600" />
         </button>
+
+        {/* Lighting summary: full on desktop and on the collapsed phone sheet, one line while it is open */}
+        <LightingCard
+          variant="full"
+          className={`border-b border-slate-800/80 ${sheetOpen ? 'max-lg:hidden' : ''}`}
+          t={t}
+          lang={lang}
+          lux={averageLux}
+          roomType={roomType}
+          onRoomType={(id) => setRoom((r) => ({ ...r, roomType: id }))}
+          mood={luxMoodShort}
+          assessment={luxAssessment}
+          plan={plan}
+          onAdjust={handleAdjustLights}
+          onAddLights={handleAddLights}
+          onMethod={() => setShowMethod(true)}
+        />
+        <LightingCard
+          variant="compact"
+          className={sheetOpen ? 'lg:hidden' : 'hidden'}
+          t={t}
+          lang={lang}
+          lux={averageLux}
+          roomType={roomType}
+          mood={luxMoodShort}
+          assessment={luxAssessment}
+          plan={plan}
+        />
 
         {/* Navigation Tabs */}
         <div className="grid grid-cols-3 gap-1 p-2 bg-slate-950/60 border-b border-slate-800/80">
@@ -836,8 +1018,8 @@ export default function App() {
                           </div>
                         </div>
 
-                        {/* Right: Inline Quick Action Icons (Center, Duplicate, Delete) */}
-                        <div className="flex items-center gap-1 ml-2 shrink-0">
+                        {/* Right: quick actions (center, duplicate, delete), on the selected row only */}
+                        <div className={`items-center gap-1 ml-2 shrink-0 ${isSel ? 'flex' : 'hidden'}`}>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -877,264 +1059,216 @@ export default function App() {
               </div>
 
               {selectedLamp && (
-                <div className="space-y-4 pt-2 border-t border-slate-800/80">
-                  {/* Color Temperature (Warm / Neutral / Cool White) */}
-                  <div className="space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-semibold text-slate-200">
-                        {t.colorTempLabel}
-                      </label>
-                      <span
-                        className="text-xs font-bold px-2 py-0.5 rounded-md border border-black/20 text-slate-950"
-                        style={{ backgroundColor: kelvinToHex(selectedLamp.kelvin) }}
-                      >
-                        {selectedLamp.kelvin}K
-                      </span>
-                    </div>
-
-                    {/* Main 3 Featured Temperature Buttons */}
+                <div className="space-y-4 pt-3 border-t border-slate-800/80">
+                  {/* Light color: the three common choices */}
+                  <div className="space-y-2">
+                    <span className="text-xs font-semibold text-slate-200 block">{t.lightColor}</span>
                     <div className="grid grid-cols-3 gap-2">
                       {[
-                        { label: t.warmWhite, kelvin: 2700, sub: t.warmSub },
-                        { label: t.neutralWhite, kelvin: 4000, sub: t.neutralSub },
-                        { label: t.coolWhite, kelvin: 6500, sub: t.coolSub },
+                        { label: t.warmWhite, kelvin: 2700 },
+                        { label: t.neutralWhite, kelvin: 4000 },
+                        { label: t.coolWhite, kelvin: 6500 },
                       ].map((preset) => {
-                        const active =
-                          Math.abs(selectedLamp.kelvin - preset.kelvin) < 250;
+                        const active = Math.abs(selectedLamp.kelvin - preset.kelvin) < 250;
                         const bgHex = kelvinToHex(preset.kelvin);
                         return (
                           <button
                             key={preset.kelvin}
-                            onClick={() =>
-                              handleUpdateLamp(selectedLamp.id, {
-                                kelvin: preset.kelvin,
-                                isOn: true,
-                              })
-                            }
-                            className={`p-2 rounded-xl border text-left transition-all cursor-pointer flex flex-col gap-0.5 ${
+                            onClick={() => handleUpdateLamp(selectedLamp.id, { kelvin: preset.kelvin, isOn: true })}
+                            aria-pressed={active}
+                            className={`min-h-11 px-2 py-1.5 rounded-xl border flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
                               active
-                                ? 'bg-slate-800 border-amber-400 ring-1 ring-amber-400/50'
-                                : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                                ? 'bg-amber-500/10 border-amber-400 text-white'
+                                : 'bg-slate-950/60 border-slate-800 text-slate-300 hover:border-slate-700'
                             }`}
                           >
-                            <div className="flex items-center justify-between">
+                            <span className="flex items-center gap-1.5 text-xs font-semibold leading-tight text-center">
                               <span
-                                className="w-3.5 h-3.5 rounded-full border border-black/20 shadow-sm"
-                                style={{
-                                  backgroundColor: bgHex,
-                                  boxShadow: `0 0 8px ${bgHex}`,
-                                }}
+                                className="w-2.5 h-2.5 rounded-full shrink-0"
+                                style={{ backgroundColor: bgHex, boxShadow: `0 0 6px ${bgHex}` }}
                               />
-                              {active && <Check className="w-3.5 h-3.5 text-amber-400" />}
-                            </div>
-                            <span className="text-xs font-bold text-white leading-tight mt-0.5">
                               {preset.label}
                             </span>
-                            <span className="text-[10px] text-slate-400">{preset.sub}</span>
+                            <span className={`text-[10px] ${active ? 'text-amber-300' : 'text-slate-400'}`}>
+                              {preset.kelvin}K
+                            </span>
                           </button>
                         );
                       })}
                     </div>
-
-                    {/* Continuous Kelvin Spectrum Slider */}
-                    <div className="space-y-1 pt-0.5">
-                      <input
-                        type="range"
-                        min={2000}
-                        max={7000}
-                        step={100}
-                        value={selectedLamp.kelvin}
-                        onChange={(e) =>
-                          handleUpdateLamp(selectedLamp.id, {
-                            kelvin: Number(e.target.value),
-                            isOn: true,
-                          })
-                        }
-                        className="w-full h-2 rounded-lg appearance-none cursor-pointer"
-                        style={{
-                          background:
-                            'linear-gradient(to right, #ff8a12 0%, #ffb46b 25%, #ffdead 50%, #fff4e5 75%, #dbeafe 100%)',
-                        }}
-                      />
-                      <div className="flex justify-between text-[10px] text-slate-400">
-                        <span>{t.kelvin2000}</span>
-                        <span>{t.kelvin3000}</span>
-                        <span>{t.kelvin5000}</span>
-                        <span>{t.kelvin7000}</span>
-                      </div>
-                    </div>
                   </div>
 
-                  {/* Power (Watts) & Luminous Flux (Lumens) */}
-                  <div className="space-y-2.5 bg-slate-950/50 p-3 rounded-2xl border border-slate-800/80">
+                  {/* Brightness: lumens slider + the usual LED bulbs as shortcuts */}
+                  <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <label className="text-xs font-semibold text-slate-200">
-                        {t.powerBrightness}
+                      <label htmlFor="lamp-lumens" className="text-xs font-semibold text-slate-200">
+                        {t.brightness}
                       </label>
-                      <span className="text-xs font-bold text-amber-300">
-                        {selectedLamp.watts}W LED ≈ {selectedLamp.lumens} lm
+                      <span className="text-xs font-bold text-amber-300 tabular-nums">
+                        {selectedLamp.lumens} lm · {selectedLamp.watts} W
                       </span>
                     </div>
-
-                    {/* Quick Commercial Bulb Wattage Presets */}
-                    <div className="grid grid-cols-3 gap-1.5">
+                    <input
+                      id="lamp-lumens"
+                      type="range"
+                      min={LAMP_MIN_LM}
+                      max={LAMP_MAX_LM}
+                      step={50}
+                      value={selectedLamp.lumens}
+                      onChange={(e) => {
+                        const lm = Number(e.target.value);
+                        handleUpdateLamp(selectedLamp.id, { lumens: lm, watts: lumensToWatts(lm), isOn: true });
+                      }}
+                      className="w-full accent-amber-400 cursor-pointer"
+                    />
+                    <div className="grid grid-cols-6 gap-1">
                       {WATT_PRESETS.map((wp) => {
                         const isMatch = Math.abs(selectedLamp.watts - wp.watts) < 0.8;
                         return (
                           <button
                             key={wp.watts}
                             onClick={() =>
-                              handleUpdateLamp(selectedLamp.id, {
-                                watts: wp.watts,
-                                lumens: wp.lumens,
-                                isOn: true,
-                              })
+                              handleUpdateLamp(selectedLamp.id, { watts: wp.watts, lumens: wp.lumens, isOn: true })
                             }
-                            className={`py-1 px-1.5 rounded-lg border text-center transition-all cursor-pointer ${
+                            aria-pressed={isMatch}
+                            title={`${wp.label} • ${wp.lumens} lm`}
+                            className={`h-8 rounded-lg border text-[11px] transition-all cursor-pointer ${
                               isMatch
                                 ? 'bg-amber-500/20 border-amber-400 text-amber-200 font-bold'
-                                : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
+                                : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200'
                             }`}
                           >
-                            <div className="text-[11px]">
-                              {wp.label} • {wp.lumens}lm
-                            </div>
+                            {wp.label}
                           </button>
                         );
                       })}
                     </div>
-
-                    {/* Lumens Slider */}
-                    <div className="space-y-0.5 pt-0.5">
-                      <div className="flex justify-between text-[11px]">
-                        <span className="text-slate-400">{t.luminousFlux}</span>
-                        <span className="font-semibold text-white">
-                          {selectedLamp.lumens} lm
-                        </span>
-                      </div>
-                      <input
-                        type="range"
-                        min={200}
-                        max={4500}
-                        step={50}
-                        value={selectedLamp.lumens}
-                        onChange={(e) => {
-                          const lm = Number(e.target.value);
-                          handleUpdateLamp(selectedLamp.id, {
-                            lumens: lm,
-                            watts: lumensToWatts(lm),
-                            isOn: true,
-                          });
-                        }}
-                        className="w-full accent-amber-400 cursor-pointer"
-                      />
-                    </div>
-
-                    {/* Watts LED Slider */}
-                    <div className="space-y-0.5">
-                      <div className="flex justify-between text-[11px]">
-                        <span className="text-slate-400">{t.powerConsumed}</span>
-                        <span className="font-semibold text-white">
-                          {selectedLamp.watts} W
-                        </span>
-                      </div>
-                      <input
-                        type="range"
-                        min={2}
-                        max={48}
-                        step={1}
-                        value={selectedLamp.watts}
-                        onChange={(e) => {
-                          const w = Number(e.target.value);
-                          handleUpdateLamp(selectedLamp.id, {
-                            watts: w,
-                            lumens: wattsToLumens(w),
-                            isOn: true,
-                          });
-                        }}
-                        className="w-full accent-amber-400 cursor-pointer"
-                      />
-                    </div>
                   </div>
 
-                  {/* Fixture Style & Size */}
-                  <div className="space-y-2.5">
-                    <label className="text-xs font-semibold text-slate-200 block">
-                      {t.fixtureModelSize}
-                    </label>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {[
-                        { id: 'pendant', label: t.typePendant },
-                        { id: 'plafon', label: t.typePlafon },
-                        { id: 'spot', label: t.typeSpot },
-                        { id: 'floor_lamp', label: t.typeFloor },
-                      ].map((itemType) => (
+                  {/* Fixture type */}
+                  <div className="space-y-2">
+                    <span className="text-xs font-semibold text-slate-200 block">{t.fixture}</span>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {['pendant', 'plafon', 'spot', 'floor_lamp'].map((id) => (
                         <button
-                          key={itemType.id}
-                          onClick={() =>
-                            handleUpdateLamp(selectedLamp.id, {
-                              type: itemType.id,
-                              nameKey: null,
-                            })
-                          }
-                          className={`py-1.5 px-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
-                            selectedLamp.type === itemType.id
-                              ? 'bg-slate-800 border-amber-400 text-white font-semibold'
+                          key={id}
+                          onClick={() => handleUpdateLamp(selectedLamp.id, { type: id, nameKey: null })}
+                          aria-pressed={selectedLamp.type === id}
+                          className={`h-9 px-1 rounded-xl border text-xs transition-all cursor-pointer ${
+                            selectedLamp.type === id
+                              ? 'bg-amber-500/10 border-amber-400 text-white font-semibold'
                               : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200'
                           }`}
                         >
-                          {itemType.label}
+                          {t.typeShort[id]}
                         </button>
                       ))}
                     </div>
+                  </div>
 
-                    {/* Lamp Size (Scale) Slider */}
-                    <div className="space-y-0.5 pt-0.5">
-                      <div className="flex justify-between text-xs">
-                        <span className="text-slate-400">{t.lampSize}</span>
-                        <span className="font-semibold text-amber-300">
-                          {Math.round(selectedLamp.scale * 100)}%
-                        </span>
-                      </div>
-                      <input
-                        type="range"
-                        min={0.5}
-                        max={2.4}
-                        step={0.05}
-                        value={selectedLamp.scale}
-                        onChange={(e) =>
-                          handleUpdateLamp(selectedLamp.id, {
-                            scale: Number(e.target.value),
-                          })
-                        }
-                        className="w-full accent-amber-400 cursor-pointer"
-                      />
-                    </div>
+                  {/* Advanced: exact Kelvin, watts, size, pendant height */}
+                  <div className="rounded-xl border border-dashed border-slate-700">
+                    <button
+                      type="button"
+                      onClick={() => setAdvOpen((o) => !o)}
+                      aria-expanded={advOpen}
+                      className="w-full flex items-center justify-between gap-2 px-3.5 py-2.5 text-left cursor-pointer"
+                    >
+                      <span>
+                        <span className="block text-[13px] font-semibold text-slate-200">{t.advanced}</span>
+                        <span className="block text-[11px] text-slate-400">{t.advancedSub}</span>
+                      </span>
+                      <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${advOpen ? 'rotate-90' : ''}`} />
+                    </button>
 
-                    {/* Pendant Cord Drop Height */}
-                    {selectedLamp.type === 'pendant' && (
-                      <div className="space-y-0.5">
-                        <div className="flex justify-between text-xs">
-                          <span className="text-slate-400">{t.pendantHeight}</span>
-                          <span className="font-semibold text-slate-200">
-                            {selectedLamp.heightOffset >= 0
-                              ? t.high
-                              : `${selectedLamp.heightOffset}m`}
-                          </span>
+                    {advOpen && (
+                      <div className="px-3.5 pb-3.5 space-y-3.5">
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-xs">
+                            <label htmlFor="lamp-kelvin" className="text-slate-400">{t.exactKelvin}</label>
+                            <span className="font-semibold text-white">{selectedLamp.kelvin} K</span>
+                          </div>
+                          <input
+                            id="lamp-kelvin"
+                            type="range"
+                            min={2000}
+                            max={7000}
+                            step={100}
+                            value={selectedLamp.kelvin}
+                            onChange={(e) =>
+                              handleUpdateLamp(selectedLamp.id, { kelvin: Number(e.target.value), isOn: true })
+                            }
+                            className="w-full h-2 rounded-lg appearance-none cursor-pointer"
+                            style={{
+                              background:
+                                'linear-gradient(to right, #ff8a12 0%, #ffb46b 25%, #ffdead 50%, #fff4e5 75%, #dbeafe 100%)',
+                            }}
+                          />
+                          <div className="flex justify-between text-[10px] text-slate-400">
+                            <span>{t.kelvin2000}</span>
+                            <span>{t.kelvin7000}</span>
+                          </div>
                         </div>
-                        <input
-                          type="range"
-                          min={-1.0}
-                          max={0.3}
-                          step={0.05}
-                          value={selectedLamp.heightOffset || 0}
-                          onChange={(e) =>
-                            handleUpdateLamp(selectedLamp.id, {
-                              heightOffset: Number(e.target.value),
-                            })
-                          }
-                          className="w-full accent-amber-400 cursor-pointer"
-                        />
+
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-xs">
+                            <label htmlFor="lamp-watts" className="text-slate-400">{t.powerConsumed}</label>
+                            <span className="font-semibold text-white">{selectedLamp.watts} W</span>
+                          </div>
+                          <input
+                            id="lamp-watts"
+                            type="range"
+                            min={2}
+                            max={48}
+                            step={1}
+                            value={selectedLamp.watts}
+                            onChange={(e) => {
+                              const w = Number(e.target.value);
+                              handleUpdateLamp(selectedLamp.id, { watts: w, lumens: wattsToLumens(w), isOn: true });
+                            }}
+                            className="w-full accent-amber-400 cursor-pointer"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-xs">
+                            <label htmlFor="lamp-scale" className="text-slate-400">{t.lampSize}</label>
+                            <span className="font-semibold text-white">{Math.round(selectedLamp.scale * 100)}%</span>
+                          </div>
+                          <input
+                            id="lamp-scale"
+                            type="range"
+                            min={0.5}
+                            max={2.4}
+                            step={0.05}
+                            value={selectedLamp.scale}
+                            onChange={(e) => handleUpdateLamp(selectedLamp.id, { scale: Number(e.target.value) })}
+                            className="w-full accent-amber-400 cursor-pointer"
+                          />
+                        </div>
+
+                        {selectedLamp.type === 'pendant' && (
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-xs">
+                              <label htmlFor="lamp-drop" className="text-slate-400">{t.pendantHeight}</label>
+                              <span className="font-semibold text-white">
+                                {selectedLamp.heightOffset >= 0 ? t.high : `${selectedLamp.heightOffset}m`}
+                              </span>
+                            </div>
+                            <input
+                              id="lamp-drop"
+                              type="range"
+                              min={-1.0}
+                              max={0.3}
+                              step={0.05}
+                              value={selectedLamp.heightOffset || 0}
+                              onChange={(e) =>
+                                handleUpdateLamp(selectedLamp.id, { heightOffset: Number(e.target.value) })
+                              }
+                              className="w-full accent-amber-400 cursor-pointer"
+                            />
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1142,6 +1276,7 @@ export default function App() {
               )}
             </>
           )}
+
 
           {/* ==========================================================
               TAB 2: ROOM (SHAPE, DIMENSIONS, WALLS, FLOOR, PRESETS)
@@ -1151,7 +1286,7 @@ export default function App() {
               {/* Ready-made Architectural Presets */}
               <div className="space-y-2">
                 <label className="text-xs font-semibold uppercase tracking-wider text-slate-400 block">
-                  {t.presetsTitle}
+                  {t.presetsShort}
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   {Object.entries(SCENE_PRESETS).map(([key, preset]) => (
@@ -1169,81 +1304,10 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Room Use → recommended lux */}
-              <div className="space-y-2 pt-2 border-t border-slate-800/80">
-                <label className="text-xs font-semibold text-slate-200 block">
-                  {t.roomTypeLabel}
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {ROOM_TYPES.map((id) => (
-                    <button
-                      key={id}
-                      onClick={() => setRoom((r) => ({ ...r, roomType: id }))}
-                      className={`flex items-center justify-between gap-1 py-1.5 px-2.5 rounded-xl border text-xs transition-all cursor-pointer ${
-                        roomType === id
-                          ? 'bg-amber-500/20 border-amber-400 text-amber-300 font-semibold'
-                          : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      <span className="truncate">{t.roomTypes[id]}</span>
-                      <span className="text-[10px] opacity-70 whitespace-nowrap">
-                        {ROOM_LUX[id].lux[0]}–{ROOM_LUX[id].lux[1]}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Estimated illuminance (lumen method) */}
-              <div
-                ref={luxPanelRef}
-                className="space-y-2 bg-slate-950/50 p-3.5 rounded-2xl border border-slate-800"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-200">{t.luxMethodTitle}</span>
-                  <span className="text-sm font-bold text-white">{averageLux} lux</span>
-                </div>
-                <div
-                  className={`px-2.5 py-1.5 rounded-lg border border-white/10 text-[11px] font-medium ${luxMood.bg} ${luxMood.color}`}
-                >
-                  <span className="opacity-70">{t.luxMood}:</span> {luxMood.label}
-                  <span className={`block mt-0.5 ${luxAssessment.color}`}>
-                    {luxAssessment.icon} {luxAssessment.label}
-                  </span>
-                  <span className="block text-[10px] font-normal text-slate-300/80">
-                    {t.recommended} · {luxAssessment.range}
-                  </span>
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-[11px] text-center">
-                  <div className="bg-slate-900/70 rounded-lg py-1">
-                    <span className="block text-slate-500">K</span>
-                    <span className="font-semibold text-slate-200">{photometry.k.toFixed(2)}</span>
-                  </div>
-                  <div className="bg-slate-900/70 rounded-lg py-1">
-                    <span className="block text-slate-500">CU</span>
-                    <span className="font-semibold text-slate-200">{photometry.cu.toFixed(2)}</span>
-                  </div>
-                  <div className="bg-slate-900/70 rounded-lg py-1">
-                    <span className="block text-slate-500">{lang === 'en' ? 'MF' : 'FM'}</span>
-                    <span className="font-semibold text-slate-200">{MAINTENANCE_FACTOR}</span>
-                  </div>
-                </div>
-                <p className="text-[11px] leading-relaxed text-slate-400">
-                  {t.luxMethodNote}{' '}
-                  <button
-                    type="button"
-                    onClick={() => setShowMethod(true)}
-                    className="inline text-amber-300 hover:text-amber-200 underline underline-offset-2 cursor-pointer"
-                  >
-                    {t.luxMethodLink}
-                  </button>
-                </p>
-              </div>
-
               {/* Room Shape */}
               <div className="space-y-2 pt-2 border-t border-slate-800/80">
                 <label className="text-xs font-semibold text-slate-200 block">
-                  {t.roomShapeLabel}
+                  {t.shapeShort}
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   {[
@@ -1270,7 +1334,7 @@ export default function App() {
               <div className="space-y-3 bg-slate-950/50 p-3.5 rounded-2xl border border-slate-800">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-slate-200">
-                    {t.roomDims}
+                    {t.measures}
                   </span>
                   <span className="text-xs font-bold text-amber-400">
                     {roomArea} {t.usefulM2}
@@ -1332,6 +1396,34 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Finishes (wall paint, floor), closed by default */}
+              <div className="rounded-xl border border-dashed border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => setFinishesOpen((o) => !o)}
+                  aria-expanded={finishesOpen}
+                  className="w-full flex items-center justify-between gap-2 px-3.5 py-2.5 text-left cursor-pointer"
+                >
+                  <span className="min-w-0">
+                    <span className="block text-[13px] font-semibold text-slate-200">{t.finishes}</span>
+                    <span className="block text-[11px] text-slate-400 truncate">
+                      {t.walls[room.wallColorId]} · {t.floors[room.floorMaterialId]}
+                    </span>
+                  </span>
+                  <span className="flex items-center gap-2 shrink-0">
+                    <span
+                      className="w-4 h-4 rounded-full border border-white/20"
+                      style={{ backgroundColor: (WALL_COLORS.find((w) => w.id === room.wallColorId) || WALL_COLORS[0]).color }}
+                    />
+                    <span
+                      className="w-4 h-4 rounded-md border border-white/20"
+                      style={{ backgroundColor: (FLOOR_MATERIALS.find((f) => f.id === room.floorMaterialId) || FLOOR_MATERIALS[0]).color }}
+                    />
+                    <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${finishesOpen ? 'rotate-90' : ''}`} />
+                  </span>
+                </button>
+                {finishesOpen && (
+                  <div className="px-3.5 pb-3.5 space-y-4">
               {/* Wall Color */}
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-slate-200 block">
@@ -1384,6 +1476,9 @@ export default function App() {
                     </button>
                   ))}
                 </div>
+              </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1648,14 +1743,6 @@ export default function App() {
           <span className="whitespace-nowrap font-mono text-[10px] tracking-wider text-slate-500">
             LuminaStudio 3D © 2026
           </span>
-          <button
-            type="button"
-            onClick={() => setShowMethod(true)}
-            className="flex items-center gap-1 text-[11px] font-medium text-slate-400 hover:text-amber-300 cursor-pointer whitespace-nowrap"
-          >
-            <Info className="w-3.5 h-3.5" />
-            {t.methodBtn}
-          </button>
           <AuthorCredit lang={lang} />
         </footer>
       </aside>
