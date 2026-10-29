@@ -5,7 +5,7 @@
  * sitemap. When you buy the domain, change the default below (or build with
  * `SITE_URL=https://your-domain npm run build`) and redeploy.
  */
-export const SITE_URL = (process.env.SITE_URL || 'https://lights-on.bruvbc.workers.dev').replace(/\/+$/, '');
+export const SITE_URL = (process.env.SITE_URL || 'https://luminastudio3d.com').replace(/\/+$/, '');
 
 export const SITE_NAME = 'LuminaStudio 3D';
 
