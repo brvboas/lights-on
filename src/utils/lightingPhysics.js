@@ -24,7 +24,6 @@ export function kelvinToHex(kelvin) {
     g = 99.4708025861 * Math.log(g) - 161.1195681661;
     g = Math.max(0, Math.min(255, g));
   } else {
-    r = temp - 60;
     g = 288.1221695283 * Math.pow(temp - 60, -0.0755148492);
     g = Math.max(0, Math.min(255, g));
   }

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Lightbulb,
   LightbulbOff,
@@ -39,6 +39,10 @@ import { TRANSLATIONS } from './utils/i18n';
 export default function App() {
   const [lang, setLang] = useState('pt'); // 'pt' | 'en'
   const t = TRANSLATIONS[lang];
+
+  useEffect(() => {
+    document.documentElement.lang = lang === 'pt' ? 'pt-BR' : 'en';
+  }, [lang]);
 
   const [room, setRoom] = useState(SCENE_PRESETS.living_room.room);
   const [lamps, setLamps] = useState(SCENE_PRESETS.living_room.lamps);
@@ -289,7 +293,7 @@ export default function App() {
     setFlashEffect(true);
 
     setTimeout(() => {
-      const canvas = document.querySelector('canvas');
+      const canvas = canvasRef.current;
       if (canvas) {
         const dataUrl = canvas.toDataURL('image/png');
         setCapturedPhoto({

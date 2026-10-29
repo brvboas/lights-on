@@ -9,22 +9,23 @@
 - **Photometric Lighting Controls**:
   - **Color Temperature (`2000K` – `7000K`)**: Continuous slider based on Tanner Helland's blackbody radiation algorithm, plus instant presets for **Warm White (`2700K`)**, **Neutral White (`4000K`)**, and **Cool White (`6500K`)**.
   - **Synchronized LED Watts & Lumens**: Coupled sliders (`95 lm/W` residential LED efficacy) with commercial bulb presets (`5W`, `9W`, `12W`, `18W`, `24W`, `36W`).
-  - **Real-Time Illuminance Telemetry (`Lux`)**: Live calculation of total room area (`m²`), active luminous flux (`lm`), power consumption (`W`), and estimated average illuminance (`Lux`) based on ceiling height utilization factors.
+  - **Real-Time Illuminance Telemetry (`Lux`)**: Live calculation of total room area (`m²`), active luminous flux (`lm`), power consumption (`W`), and estimated average illuminance (`Lux` = total lumens ÷ floor area, a simplified estimate without utilization or maintenance factors).
 - **Interactive 3D Fixtures & Drag-and-Drop**:
   - **4 Fixture Models**: Pendant (`pendant`), Flush Mount Ceiling (`plafon`), Recessed Spot (`spot`), and Floor Lamp (`floor_lamp`).
   - **Scalable Dimensions**: Resize individual fixtures from `50%` to `240%`.
   - **Direct 3D Manipulation**: Click and drag any lamp across the room plane with real-time laser projection guides onto the floor, or use inline quick-action buttons (`ON/OFF`, `Center`, `Duplicate`, `Delete`).
 - **Room Architecture Customization**:
   - **3 Room Geometries**: Rectangular (`rectangular`), L-Shape (`l-shape`), and Octagonal (`octagonal`).
-  - **Configurable Dimensions**: Adjust room width (`3.0m – 12.0m`), depth (`3.0m – 12.0m`), and ceiling height (`2.4m – 4.5m`).
+  - **Configurable Dimensions**: Adjust room width (`2.5m – 9.0m`), depth (`2.5m – 9.0m`), and ceiling height (`2.3m – 4.2m`).
   - **Surface Finishes**: Choose from 6 wall colors and 5 floor materials with custom roughness and metalness properties.
 - **3D Furniture & Shadow Testing**:
   - **Built-in Catalog**: Sofa, Dining Table, Double Bed, Office Desk, Bookshelf, Armchair, and Potted Plant.
   - **Shadow Casting**: All furniture meshes cast and receive dynamic 3D shadows (`2048×2048` shadow maps) to inspect light placement and occlusion.
-  - **Full Placement Controls**: Drag-and-drop on the floor, rotate in `45°` or `15°` increments, scale (`50% – 180%`), and recolor.
+  - **Full Placement Controls**: Drag-and-drop on the floor, rotate with a `+45°` button or a `5°`-step slider, scale (`65% – 150%`), and recolor.
 - **Snapshot Studio & Bilingual UI**:
   - **High-Resolution Capture**: Render and download instant PNG snapshots (`preserveDrawingBuffer: true`) with an interactive preview modal.
   - **Bilingual Interface (`PT` / `EN`)**: Instant language toggle between Portuguese and English in the top navigation bar.
+  - **Responsive Layout**: On phones and tablets (below `1024px`) the control sidebar turns into a collapsible bottom sheet; tap a tab to open it and tap it again to collapse.
 
 ---
 
