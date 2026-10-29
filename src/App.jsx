@@ -61,6 +61,10 @@ export default function App() {
   const [showFurnitureMenu, setShowFurnitureMenu] = useState(false);
   // Mobile/tablet only (< lg): the sidebar becomes a bottom sheet that can be collapsed
   const [sheetOpen, setSheetOpen] = useState(false);
+  const asideRef = useRef(null);
+  const dragZoneRef = useRef(null);
+  const sheetDrag = useRef(null); // live drag info, kept out of React state to avoid re-renders
+  const suppressClick = useRef(false);
 
   const canvasRef = useRef(null);
 
@@ -147,6 +151,79 @@ export default function App() {
     } else {
       setActiveTab(tab);
       setSheetOpen(true);
+    }
+  };
+
+  // Swipe the bottom sheet up/down (only below lg; desktop never enters this path)
+  const isSheetLayout = () => window.matchMedia('(max-width: 1023.98px)').matches;
+  const sheetHeights = () => {
+    const aside = asideRef.current;
+    const cs = getComputedStyle(aside);
+    const collapsed =
+      dragZoneRef.current.offsetHeight + parseFloat(cs.paddingBottom) + parseFloat(cs.borderTopWidth);
+    const open = Math.min(window.innerHeight * 0.58, 560);
+    return { collapsed, open };
+  };
+
+  const handleSheetPointerDown = (e) => {
+    if (!isSheetLayout() || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    sheetDrag.current = {
+      id: e.pointerId,
+      startY: e.clientY,
+      startH: asideRef.current.offsetHeight,
+      startT: e.timeStamp,
+      moved: false,
+    };
+  };
+
+  const handleSheetPointerMove = (e) => {
+    const d = sheetDrag.current;
+    if (!d || d.id !== e.pointerId) return;
+    const dy = d.startY - e.clientY; // > 0 = finger going up
+    if (!d.moved) {
+      if (Math.abs(dy) < 6) return;
+      d.moved = true;
+      d.heights = sheetHeights();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      asideRef.current.style.transition = 'none';
+      setSheetOpen(true); // render the content so it shows while the sheet grows
+    }
+    const { collapsed, open } = d.heights;
+    const h = Math.min(open + 24, Math.max(collapsed, d.startH + dy));
+    asideRef.current.style.height = `${h}px`;
+  };
+
+  const handleSheetPointerUp = (e) => {
+    const d = sheetDrag.current;
+    if (!d || d.id !== e.pointerId) return;
+    sheetDrag.current = null;
+    if (!d.moved) return; // a plain tap: let the click open/close normally
+    suppressClick.current = true;
+    window.setTimeout(() => {
+      suppressClick.current = false; // in case the browser fired no click after the drag
+    }, 0);
+    const aside = asideRef.current;
+    const { collapsed, open } = d.heights;
+    const h = aside.offsetHeight;
+    // A short, quick flick goes where the finger went; otherwise snap to the nearest side
+    const dy = d.startY - e.clientY;
+    const isFlick = e.type !== 'pointercancel' && e.timeStamp - d.startT < 250 && Math.abs(dy) > 24;
+    const shouldOpen = isFlick ? dy > 0 : h > (collapsed + open) / 2;
+    aside.style.transition = 'height 260ms cubic-bezier(0.22, 1, 0.36, 1)';
+    aside.style.height = `${shouldOpen ? open : collapsed}px`;
+    window.setTimeout(() => {
+      aside.style.transition = '';
+      aside.style.height = '';
+      setSheetOpen(shouldOpen);
+    }, 270);
+  };
+
+  // A drag ends with a click on the tab under the finger; swallow it
+  const handleSheetClickCapture = (e) => {
+    if (suppressClick.current) {
+      suppressClick.current = false;
+      e.stopPropagation();
+      e.preventDefault();
     }
   };
 
@@ -345,27 +422,27 @@ export default function App() {
         )}
 
         {/* Top Floating Bar — Brand + Photometric HUD + Actions */}
-        <header className="absolute top-4 left-4 right-4 z-20 flex flex-wrap items-center justify-between gap-3 pointer-events-none">
+        <header className="absolute top-4 left-4 right-4 z-20 flex flex-wrap items-center justify-between gap-3 pointer-events-none max-sm:top-2.5 max-sm:left-2.5 max-sm:right-2.5 max-sm:flex-nowrap max-sm:gap-2">
           {/* Brand & Live Photometry */}
-          <div className="flex items-center gap-3 bg-slate-900/85 backdrop-blur-xl border border-slate-800/90 px-4 py-2.5 rounded-2xl shadow-2xl pointer-events-auto">
-            <div className="flex items-center gap-2.5 pr-3 border-r border-slate-800">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-slate-950 shadow-lg shadow-amber-500/25">
-                <Lightbulb className="w-5 h-5 stroke-[2.2]" />
+          <div className="flex items-center gap-3 bg-slate-900/85 backdrop-blur-xl border border-slate-800/90 px-4 py-2.5 rounded-2xl shadow-2xl pointer-events-auto max-sm:gap-1.5 max-sm:p-1 max-sm:rounded-xl">
+            <div className="flex items-center gap-2.5 pr-3 border-r border-slate-800 max-sm:pr-0 max-sm:border-r-0">
+              <div className="w-9 h-9 max-sm:w-7 max-sm:h-7 max-sm:rounded-lg rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-slate-950 shadow-lg shadow-amber-500/25">
+                <Lightbulb className="w-5 h-5 max-sm:w-4 max-sm:h-4 stroke-[2.2]" />
               </div>
-              <div>
+              <div className="max-sm:hidden">
                 <h1 className="text-sm font-bold tracking-tight text-white flex items-center gap-1.5">
                   LuminaStudio{' '}
                   <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
                     3D
                   </span>
                 </h1>
-                <p className="text-[11px] text-slate-400 max-sm:hidden">{t.subtitle}</p>
+                <p className="text-[11px] text-slate-400">{t.subtitle}</p>
               </div>
             </div>
 
             {/* Mobile/tablet: compact illuminance chip (the full metrics only fit on xl) */}
             <div
-              className={`lg:hidden px-2 py-1 rounded-lg border border-white/10 text-[11px] font-bold whitespace-nowrap ${luxAssessment.bg} ${luxAssessment.color}`}
+              className={`lg:hidden px-2 py-1 max-sm:px-1.5 max-sm:py-0.5 rounded-lg border border-white/10 text-[11px] font-bold whitespace-nowrap ${luxAssessment.bg} ${luxAssessment.color}`}
               title={luxAssessment.label}
             >
               {averageLux} lux
@@ -401,11 +478,11 @@ export default function App() {
           </div>
 
           {/* Right Quick Action Bar */}
-          <div className="flex items-center gap-2 bg-slate-900/85 backdrop-blur-xl border border-slate-800/90 p-1.5 rounded-2xl shadow-2xl pointer-events-auto">
+          <div className="flex items-center gap-2 bg-slate-900/85 backdrop-blur-xl border border-slate-800/90 p-1.5 rounded-2xl shadow-2xl pointer-events-auto max-sm:gap-1 max-sm:p-1 max-sm:rounded-xl">
             {/* Master Power Toggle */}
             <button
               onClick={handleToggleAllLamps}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 py-2 max-sm:p-1.5 max-sm:rounded-lg rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                 anyLampOn
                   ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 hover:bg-amber-400'
                   : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
@@ -444,7 +521,7 @@ export default function App() {
             {/* Grid Toggle */}
             <button
               onClick={() => setShowGrid((g) => !g)}
-              className={`p-2 rounded-xl border transition-all cursor-pointer ${
+              className={`p-2 max-sm:p-1.5 max-sm:rounded-lg rounded-xl border transition-all cursor-pointer ${
                 showGrid
                   ? 'bg-slate-800 text-sky-400 border-sky-500/40'
                   : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
@@ -457,7 +534,7 @@ export default function App() {
             {/* Night / Twilight Ambient Toggle */}
             <button
               onClick={() => setAmbientLevel((a) => (a < 0.1 ? 0.22 : 0.03))}
-              className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-amber-300 transition-all cursor-pointer"
+              className="p-2 max-sm:p-1.5 max-sm:rounded-lg rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-amber-300 transition-all cursor-pointer"
               title={t.ambientTitle}
             >
               {ambientLevel < 0.1 ? (
@@ -470,10 +547,10 @@ export default function App() {
             {/* Language Toggle (PT / EN) */}
             <button
               onClick={() => setLang((l) => (l === 'pt' ? 'en' : 'pt'))}
-              className="flex items-center gap-1 px-2.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-bold text-slate-200 transition-all cursor-pointer"
+              className="flex items-center gap-1 px-2.5 py-2 max-sm:px-1.5 max-sm:py-1.5 max-sm:rounded-lg rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-bold text-slate-200 transition-all cursor-pointer"
               title={t.switchLangTitle}
             >
-              <Globe className="w-3.5 h-3.5 text-amber-400" />
+              <Globe className="w-3.5 h-3.5 text-amber-400 max-sm:hidden" />
               <span>{lang.toUpperCase()}</span>
             </button>
 
@@ -481,7 +558,7 @@ export default function App() {
             <button
               onClick={handleTakePhoto}
               title={t.takePhoto}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-400 hover:to-indigo-400 text-white text-xs font-semibold shadow-lg shadow-sky-500/20 transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-2 max-sm:p-1.5 max-sm:rounded-lg rounded-xl bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-400 hover:to-indigo-400 text-white text-xs font-semibold shadow-lg shadow-sky-500/20 transition-all cursor-pointer"
             >
               <Camera className="w-4 h-4" />
               <span className="max-sm:hidden">{t.takePhoto}</span>
@@ -508,11 +585,21 @@ export default function App() {
 
       {/* Right Control Studio Sidebar */}
       <aside
+        ref={asideRef}
         className={`w-96 max-w-full h-full bg-slate-900/95 backdrop-blur-2xl max-[900px]:backdrop-blur-none border-l border-slate-800/90 flex flex-col z-20 shadow-2xl max-lg:w-full max-lg:max-w-none max-lg:shrink-0 max-lg:border-l-0 max-lg:border-t max-lg:rounded-t-2xl max-lg:pb-[env(safe-area-inset-bottom)] ${
           sheetOpen ? 'max-lg:h-[min(58dvh,560px)]' : 'max-lg:h-auto'
         }`}
       >
-        {/* Mobile/tablet: grab handle that opens/collapses the bottom sheet */}
+        {/* Mobile/tablet: handle + tabs are the drag zone of the bottom sheet (tap or swipe) */}
+        <div
+          ref={dragZoneRef}
+          className="shrink-0 max-lg:touch-none"
+          onPointerDown={handleSheetPointerDown}
+          onPointerMove={handleSheetPointerMove}
+          onPointerUp={handleSheetPointerUp}
+          onPointerCancel={handleSheetPointerUp}
+          onClickCapture={handleSheetClickCapture}
+        >
         <button
           type="button"
           onClick={() => setSheetOpen((o) => !o)}
@@ -564,6 +651,7 @@ export default function App() {
               {t.tabFurniture} ({furniture.length})
             </span>
           </button>
+        </div>
         </div>
 
         {/* Scrollable Content Area */}
