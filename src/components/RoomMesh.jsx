@@ -1,7 +1,103 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { Grid } from '@react-three/drei';
 import { FLOOR_MATERIALS, WALL_COLORS } from '../utils/lightingPhysics';
+
+/** Height of a wall that faces the camera (cut so the room can be seen). */
+const CUT_HEIGHT = 0.5;
+
+/** Floor plan corners (x, z), counter-clockwise seen from above; same outlines as the floor. */
+function floorOutline(width, depth, shape) {
+  const hw = width / 2;
+  const hd = depth / 2;
+  if (shape === 'l-shape') {
+    // the quadrant x > 0, z > 0 is outside the room
+    return [[-hw, -hd], [-hw, hd], [0, hd], [0, 0], [hw, 0], [hw, -hd]];
+  }
+  if (shape === 'octagonal') {
+    const cx = width * 0.25;
+    const cz = depth * 0.25;
+    return [
+      [-hw + cx, -hd], [-hw, -hd + cz], [-hw, hd - cz], [-hw + cx, hd],
+      [hw - cx, hd], [hw, hd - cz], [hw, -hd + cz], [hw - cx, -hd],
+    ];
+  }
+  return [[-hw, -hd], [-hw, hd], [hw, hd], [hw, -hd]];
+}
+
+/**
+ * One wall per side of the floor plan. Every frame, a wall whose outer face looks at the
+ * camera (camera outside its plane) drops to CUT_HEIGHT, so whatever the angle the walls in
+ * front are cut and the ones behind stay full height.
+ */
+function CutawayWalls({ outline, height, thickness, color, onSelectEmpty }) {
+  const refs = useRef([]);
+  const walls = useMemo(() => {
+    // signed area tells the winding, so the outward normal is right for concave plans too
+    let area = 0;
+    outline.forEach(([x1, z1], i) => {
+      const [x2, z2] = outline[(i + 1) % outline.length];
+      area += x1 * z2 - x2 * z1;
+    });
+    const sign = area > 0 ? 1 : -1;
+    return outline.map(([x1, z1], i) => {
+      const [x2, z2] = outline[(i + 1) % outline.length];
+      const dx = x2 - x1;
+      const dz = z2 - z1;
+      const len = Math.hypot(dx, dz);
+      const nx = (sign * dz) / len; // outward normal
+      const nz = (sign * -dx) / len;
+      return {
+        mx: (x1 + x2) / 2,
+        mz: (z1 + z2) / 2,
+        nx,
+        nz,
+        len,
+        angle: Math.atan2(dz, dx),
+        inner: sign, // local z side of the room after the -angle rotation
+      };
+    });
+  }, [outline]);
+
+  useFrame(({ camera }) => {
+    walls.forEach((w, i) => {
+      const mesh = refs.current[i];
+      if (!mesh) return;
+      const facing = (camera.position.x - w.mx) * w.nx + (camera.position.z - w.mz) * w.nz > 0.05;
+      const h = facing ? CUT_HEIGHT : height;
+      // Compare with the mesh itself (not a cached value): a re-render (preset, size, color)
+      // puts the JSX position back to full height, and it must be fixed on the same frame
+      if (Math.abs(mesh.scale.y - h / height) > 1e-6 || Math.abs(mesh.position.y - h / 2) > 1e-6) {
+        mesh.scale.y = h / height;
+        mesh.position.y = h / 2;
+      }
+    });
+  });
+
+  return walls.map((w, i) => (
+    <group key={i} position={[w.mx + (w.nx * thickness) / 2, 0, w.mz + (w.nz * thickness) / 2]} rotation={[0, -w.angle, 0]}>
+      <mesh
+        ref={(m) => (refs.current[i] = m)}
+        position={[0, height / 2, 0]}
+        receiveShadow
+        castShadow
+        onPointerDown={(e) => {
+          e.stopPropagation();
+          onSelectEmpty && onSelectEmpty();
+        }}
+      >
+        <boxGeometry args={[w.len + thickness, height, thickness]} />
+        <meshStandardMaterial color={color} roughness={0.85} />
+      </mesh>
+      {/* baseboard on the inner face */}
+      <mesh position={[0, 0.06, w.inner * (thickness / 2 + 0.0125)]} receiveShadow>
+        <boxGeometry args={[w.len, 0.12, 0.025]} />
+        <meshStandardMaterial color="#f8fafc" roughness={0.5} />
+      </mesh>
+    </group>
+  ));
+}
 
 export default function RoomMesh({ room, showGrid, onSelectEmpty }) {
   const { width, depth, height, shape, floorMaterialId, wallColorId, showCeiling } = room;
@@ -17,6 +113,7 @@ export default function RoomMesh({ room, showGrid, onSelectEmpty }) {
   );
 
   const wallThickness = 0.14;
+  const outline = useMemo(() => floorOutline(width, depth, shape), [width, depth, shape]);
   const hw = width / 2;
   const hd = depth / 2;
 
@@ -98,162 +195,14 @@ export default function RoomMesh({ room, showGrid, onSelectEmpty }) {
         />
       )}
 
-      {/* Walls based on shape */}
-      {shape === 'rectangular' && (
-        <>
-          {/* Back Wall (North, z = -hd) */}
-          <mesh
-            position={[0, height / 2, -hd - wallThickness / 2]}
-            receiveShadow
-            castShadow
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              onSelectEmpty && onSelectEmpty();
-            }}
-          >
-            <boxGeometry args={[width + wallThickness * 2, height, wallThickness]} />
-            <meshStandardMaterial color={wallColor} roughness={0.85} />
-          </mesh>
-
-          {/* Left Wall (West, x = -hw) */}
-          <mesh
-            position={[-hw - wallThickness / 2, height / 2, 0]}
-            receiveShadow
-            castShadow
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              onSelectEmpty && onSelectEmpty();
-            }}
-          >
-            <boxGeometry args={[wallThickness, height, depth]} />
-            <meshStandardMaterial color={wallColor} roughness={0.85} />
-          </mesh>
-
-          {/* Right Low Cutaway Wall (East, x = +hw) */}
-          <mesh
-            position={[hw + wallThickness / 2, 0.25, 0]}
-            receiveShadow
-            castShadow
-          >
-            <boxGeometry args={[wallThickness, 0.5, depth]} />
-            <meshStandardMaterial color={wallColor} roughness={0.85} />
-          </mesh>
-
-          {/* White Baseboards */}
-          <mesh position={[0, 0.06, -hd + 0.01]} receiveShadow>
-            <boxGeometry args={[width, 0.12, 0.025]} />
-            <meshStandardMaterial color="#f8fafc" roughness={0.5} />
-          </mesh>
-          <mesh position={[-hw + 0.01, 0.06, 0]} receiveShadow>
-            <boxGeometry args={[0.025, 0.12, depth]} />
-            <meshStandardMaterial color="#f8fafc" roughness={0.5} />
-          </mesh>
-        </>
-      )}
-
-      {shape === 'l-shape' && (
-        <>
-          {/* Back Wall Full Width */}
-          <mesh
-            position={[0, height / 2, -hd - wallThickness / 2]}
-            receiveShadow
-            castShadow
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              onSelectEmpty && onSelectEmpty();
-            }}
-          >
-            <boxGeometry args={[width + wallThickness * 2, height, wallThickness]} />
-            <meshStandardMaterial color={wallColor} roughness={0.85} />
-          </mesh>
-
-          {/* Left Wall Full Depth */}
-          <mesh
-            position={[-hw - wallThickness / 2, height / 2, 0]}
-            receiveShadow
-            castShadow
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              onSelectEmpty && onSelectEmpty();
-            }}
-          >
-            <boxGeometry args={[wallThickness, height, depth]} />
-            <meshStandardMaterial color={wallColor} roughness={0.85} />
-          </mesh>
-
-          {/* Inner L Corner Walls */}
-          <mesh
-            position={[hw / 2, height / 2, 0 + wallThickness / 2]}
-            receiveShadow
-            castShadow
-          >
-            <boxGeometry args={[hw + wallThickness, height, wallThickness]} />
-            <meshStandardMaterial color={wallColor} roughness={0.85} />
-          </mesh>
-          <mesh
-            position={[0 + wallThickness / 2, height / 2, hd / 2]}
-            receiveShadow
-            castShadow
-          >
-            <boxGeometry args={[wallThickness, height, hd]} />
-            <meshStandardMaterial color={wallColor} roughness={0.85} />
-          </mesh>
-        </>
-      )}
-
-      {shape === 'octagonal' && (
-        <>
-          {/* Back Center Segment */}
-          <mesh
-            position={[0, height / 2, -hd - wallThickness / 2]}
-            receiveShadow
-            castShadow
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              onSelectEmpty && onSelectEmpty();
-            }}
-          >
-            <boxGeometry args={[width * 0.52, height, wallThickness]} />
-            <meshStandardMaterial color={wallColor} roughness={0.85} />
-          </mesh>
-
-          {/* Left Center Segment */}
-          <mesh
-            position={[-hw - wallThickness / 2, height / 2, 0]}
-            receiveShadow
-            castShadow
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              onSelectEmpty && onSelectEmpty();
-            }}
-          >
-            <boxGeometry args={[wallThickness, height, depth * 0.52]} />
-            <meshStandardMaterial color={wallColor} roughness={0.85} />
-          </mesh>
-
-          {/* Back-Left Chamfer Wall */}
-          <mesh
-            position={[-hw * 0.75, height / 2, -hd * 0.75]}
-            rotation={[0, Math.PI / 4, 0]}
-            receiveShadow
-            castShadow
-          >
-            <boxGeometry args={[Math.hypot(width * 0.25, depth * 0.25) + 0.1, height, wallThickness]} />
-            <meshStandardMaterial color={wallColor} roughness={0.85} />
-          </mesh>
-
-          {/* Back-Right Chamfer Wall */}
-          <mesh
-            position={[hw * 0.75, height / 2, -hd * 0.75]}
-            rotation={[0, -Math.PI / 4, 0]}
-            receiveShadow
-            castShadow
-          >
-            <boxGeometry args={[Math.hypot(width * 0.25, depth * 0.25) + 0.1, height, wallThickness]} />
-            <meshStandardMaterial color={wallColor} roughness={0.85} />
-          </mesh>
-        </>
-      )}
+      {/* Walls: every side of the floor plan; the ones between the camera and the room are cut low */}
+      <CutawayWalls
+        outline={outline}
+        height={height}
+        thickness={wallThickness}
+        color={wallColor}
+        onSelectEmpty={onSelectEmpty}
+      />
 
       {/* Semi-transparent Ceiling Reference Plane */}
       {showCeiling && (
