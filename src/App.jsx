@@ -36,13 +36,49 @@ import {
 } from './utils/lightingPhysics';
 import { TRANSLATIONS } from './utils/i18n';
 
+const LANGS = ['pt', 'en', 'es'];
+const HTML_LANG = { pt: 'pt-BR', en: 'en', es: 'es' };
+
+/**
+ * Starting language: the URL (/pt/, /en/, /es/ — the server already sends "/" to the
+ * visitor's language by country), then the visitor's last choice, then the browser language.
+ */
+function initialLang() {
+  if (typeof window === 'undefined') return 'pt';
+  const fromPath = window.location.pathname.split('/')[1];
+  if (LANGS.includes(fromPath)) return fromPath;
+  const saved = document.cookie.match(/(?:^|; )lang=(pt|en|es)/)?.[1];
+  if (saved) return saved;
+  for (const l of navigator.languages || [navigator.language]) {
+    const code = String(l).slice(0, 2).toLowerCase();
+    if (LANGS.includes(code)) return code;
+  }
+  return 'en';
+}
+
 export default function App() {
-  const [lang, setLang] = useState('pt'); // 'pt' | 'en'
+  const [lang, setLang] = useState(initialLang); // 'pt' | 'en' | 'es'
   const t = TRANSLATIONS[lang];
 
+  // Keep <html lang>, title, description and the language URL (/pt/, /en/, /es/) in sync
   useEffect(() => {
-    document.documentElement.lang = lang === 'pt' ? 'pt-BR' : 'en';
-  }, [lang]);
+    document.documentElement.lang = HTML_LANG[lang];
+    document.title = t.metaTitle;
+    document.querySelector('meta[name="description"]')?.setAttribute('content', t.metaDescription);
+    const { pathname, search, hash } = window.location;
+    const first = pathname.split('/')[1];
+    if (first !== lang && (pathname === '/' || LANGS.includes(first))) {
+      window.history.replaceState(null, '', `/${lang}/${search}${hash}`);
+    }
+  }, [lang, t]);
+
+  // Language picked by hand: remember it, so "/" opens in that language next time
+  const cycleLang = () =>
+    setLang((l) => {
+      const next = LANGS[(LANGS.indexOf(l) + 1) % LANGS.length];
+      document.cookie = `lang=${next}; path=/; max-age=31536000; samesite=lax`;
+      return next;
+    });
 
   const [room, setRoom] = useState(SCENE_PRESETS.living_room.room);
   const [lamps, setLamps] = useState(SCENE_PRESETS.living_room.lamps);
@@ -544,9 +580,9 @@ export default function App() {
               )}
             </button>
 
-            {/* Language Toggle (PT / EN) */}
+            {/* Language Toggle (PT → EN → ES) */}
             <button
-              onClick={() => setLang((l) => (l === 'pt' ? 'en' : 'pt'))}
+              onClick={cycleLang}
               className="flex items-center gap-1 px-2.5 py-2 max-sm:px-1.5 max-sm:py-1.5 max-sm:rounded-lg rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-bold text-slate-200 transition-all cursor-pointer"
               title={t.switchLangTitle}
             >

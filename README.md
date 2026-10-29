@@ -24,7 +24,7 @@
   - **Full Placement Controls**: Drag-and-drop on the floor, rotate with a `+45°` button or a `5°`-step slider, scale (`65% – 150%`), and recolor.
 - **Snapshot Studio & Bilingual UI**:
   - **High-Resolution Capture**: Render and download instant PNG snapshots (`preserveDrawingBuffer: true`) with an interactive preview modal.
-  - **Bilingual Interface (`PT` / `EN`)**: Instant language toggle between Portuguese and English in the top navigation bar.
+  - **Trilingual Interface (`PT` / `EN` / `ES`)**: Each language has its own URL (`/pt/`, `/en/`, `/es/`). `/` opens the visitor's language by country (Cloudflare geolocation), then browser language; the toggle in the top bar cycles PT → EN → ES and remembers the choice.
   - **Responsive Layout**: On phones and tablets (below `1024px`) the control sidebar turns into a collapsible bottom sheet; tap a tab to open it and tap it again to collapse.
 
 ---
@@ -60,7 +60,10 @@ lights_on/
     │   └── Furniture3D.jsx     # Procedural 3D furniture models with shadow casting and drag support
     └── utils/
         ├── lightingPhysics.js  # Photometric conversions (Kelvin to RGB, Watts/Lumens, Lux) & catalogs
-        └── i18n.js             # Complete English (en) and Portuguese (pt) translation dictionaries
+        └── i18n.js             # Portuguese (pt), English (en) and Spanish (es) dictionaries
+seo/                            # Post-build SEO step: per-language pages, guides, sitemap (see "SEO")
+public/                         # favicon, app icons, og-image.png (social preview), web manifest
+worker.js                       # Cloudflare Worker for "/" only: redirects to /pt/, /en/ or /es/ by country
 ```
 
 ---
@@ -99,6 +102,27 @@ To preview the production build locally:
 ```bash
 npm run preview
 ```
+
+---
+
+## SEO
+
+`npm run build` runs Vite and then `seo/build-seo.mjs`, which writes plain HTML pages that search engines can read without running the 3D app:
+
+| URL | What it is |
+| --- | --- |
+| `/` | Worker redirect to `/pt/`, `/en/` or `/es/` (saved choice → country → browser language → English) |
+| `/pt/`, `/en/`, `/es/` | The simulator, with its own title, description, canonical, `hreflang`, Open Graph and JSON-LD |
+| `/<lang>/<calculator>/` | Room lighting calculator (`calculadora-de-iluminacao`, `lighting-calculator`, `calculadora-de-iluminacion`) |
+| `/<lang>/<room>/` | One page per room (living room, bedroom, kitchen, bathroom, home office, dining room, hallway, laundry) |
+| `/<lang>/<guide>/` | Color temperature by room; lux vs lumens vs watts |
+| `/sitemap.xml`, `/robots.txt`, `/404.html` | Sitemap with `hreflang` alternates, crawler rules, real 404 page |
+
+The guide pages estimate lumens with light losses (`seo/illuminance.mjs`: wall color and maintenance factor) and say so; the simulator keeps its simple lumens ÷ area readout.
+
+**When the domain is bought:** change `SITE_URL` in `seo/site.config.mjs`, rebuild and deploy, then add the domain to Google Search Console / Bing Webmaster Tools and submit `/sitemap.xml`.
+
+`npm run dev` only serves the simulator; to see the guide pages locally run `npm run build` and `npm run preview`.
 
 ---
 
