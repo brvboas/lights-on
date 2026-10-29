@@ -1344,12 +1344,12 @@ export default function App() {
           )}
         </div>
 
-        {/* Footer — author credit (head opens LinkedIn/GitHub, the lamp opens the design note) */}
+        {/* Footer — author credit: small head opens LinkedIn / GitHub / inspiração */}
         <footer
           role="contentinfo"
-          className="relative shrink-0 flex items-end justify-between gap-3 px-4 py-2.5 border-t border-slate-800/80 bg-slate-950/60"
+          className="relative shrink-0 flex items-center justify-between gap-3 px-4 py-1.5 border-t border-slate-800/80 bg-slate-950/60"
         >
-          <span className="hidden min-[601px]:block pb-1.5 whitespace-nowrap font-mono text-[10px] tracking-wider text-slate-500">
+          <span className="whitespace-nowrap font-mono text-[10px] tracking-wider text-slate-500">
             LuminaStudio 3D © 2026
           </span>
           <AuthorCredit lang={lang} />

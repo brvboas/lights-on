@@ -51,7 +51,7 @@ lights_on/
     ├── assets/img/credit/
     │   └── bruno-head.webp     # Footer author credit
     ├── components/
-    │   ├── AuthorCredit.jsx    # Footer signature: LinkedIn/GitHub menu + "inspiração" design note
+    │   ├── AuthorCredit.jsx    # Footer signature: small head → LinkedIn / GitHub / "inspiração" note
     │   ├── AuthorCredit.css    # Signature styles, themed to the app
     │   ├── Scene3D.jsx         # Three.js Canvas, camera, OrbitControls, and raycast floor drag plane
     │   ├── RoomMesh.jsx        # Procedural 3D walls, floors, grids, and baseboards per room shape
@@ -110,10 +110,10 @@ npm run preview
 - Double-click lamps on and off and take a photo with a flash, as if walking through a site visit.
 - The why: picking a bulb is usually a guess (9 W or 12 W? 3000 K or 4000 K?). Here you can test it before drilling the ceiling.
 
-The same text, in Portuguese and in Bruno's own voice, is in the footer behind the **"inspiração"** lamp.
+The same text, in Portuguese and in Bruno's own voice, is in the footer: click the small head, then **"inspiração"**.
 
 ## Credits
 
-Design and development by **Bruno Villas Boas**. In the app footer, the head of his 3D figure opens a small menu with these links.
+Design and development by **Bruno Villas Boas**. In the app footer, the small head of his 3D figure opens a menu with these links and the design note.
 
 [LinkedIn](https://www.linkedin.com/in/bruno-villas-boas/) · [GitHub](https://github.com/brvboas)

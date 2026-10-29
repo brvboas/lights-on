@@ -9,6 +9,8 @@ const COPY = {
   pt: {
     newTab: '(abre em nova aba)',
     inspiration: 'inspiração',
+    credits: 'Créditos do autor',
+    back: 'voltar',
     eyebrow: 'De onde veio a ideia',
     note: [
       'Quis que o site parecesse um cômodo à noite, antes de alguém acender a luz. Por isso tudo é escuro, azul-grafite, e os painéis flutuam como vidro fosco por cima da cena: quem tem que aparecer é a luz das lâmpadas.',
@@ -19,6 +21,8 @@ const COPY = {
   en: {
     newTab: '(opens in a new tab)',
     inspiration: 'inspiration',
+    credits: 'Author credits',
+    back: 'back',
     eyebrow: 'Where the idea came from',
     note: [
       'I wanted the site to feel like a room at night, right before someone flips the switch. That is why everything is dark slate and the panels float like frosted glass over the scene: the lamps are the ones that should shine.',
@@ -28,24 +32,28 @@ const COPY = {
   },
 };
 
-/** Footer signature (Bruno's standard): head opens LinkedIn/GitHub, the lamp opens a note about the design. */
+/**
+ * Footer signature, compact version: only a small head is visible.
+ * Clicking it opens a card with "by Bruno Villas Boas", LinkedIn, GitHub and "inspiração";
+ * "inspiração" swaps the card for the note about the design.
+ */
 export default function AuthorCredit({ lang = 'pt' }) {
   const c = COPY[lang] ?? COPY.pt;
-  const [open, setOpen] = useState(null); // 'links' | 'inspiration' | null
+  const [view, setView] = useState(null); // null | 'menu' | 'note'
   const rootRef = useRef(null);
-  const linksBtn = useRef(null);
+  const headBtn = useRef(null);
   const inspBtn = useRef(null);
+  const backBtn = useRef(null);
 
   useEffect(() => {
-    if (!open) return undefined;
+    if (!view) return undefined;
     const onPointer = (e) => {
-      if (!rootRef.current?.contains(e.target)) setOpen(null);
+      if (!rootRef.current?.contains(e.target)) setView(null);
     };
     const onKey = (e) => {
       if (e.key !== 'Escape') return;
-      const btn = open === 'links' ? linksBtn.current : inspBtn.current;
-      setOpen(null);
-      btn?.focus();
+      setView(null);
+      headBtn.current?.focus();
     };
     document.addEventListener('pointerdown', onPointer, true);
     document.addEventListener('keydown', onKey);
@@ -53,25 +61,36 @@ export default function AuthorCredit({ lang = 'pt' }) {
       document.removeEventListener('pointerdown', onPointer, true);
       document.removeEventListener('keydown', onKey);
     };
-  }, [open]);
+  }, [view]);
 
-  const toggle = (id) => setOpen((cur) => (cur === id ? null : id));
+  // Keep keyboard focus inside the card when switching views
+  useEffect(() => {
+    if (view === 'note') backBtn.current?.focus();
+  }, [view]);
+
+  const openNote = () => setView('note');
+  const backToMenu = () => {
+    setView('menu');
+    requestAnimationFrame(() => inspBtn.current?.focus());
+  };
 
   return (
     <div className="credit" ref={rootRef}>
-      <div className="credit__item">
-        <button
-          ref={linksBtn}
-          className="credit__toggle"
-          type="button"
-          aria-expanded={open === 'links'}
-          aria-controls="credit-menu"
-          onClick={() => toggle('links')}
-        >
-          <img className="credit__head" src={headImg} alt="" width="216" height="240" loading="lazy" decoding="async" />
-          <span className="credit__name">by Bruno Villas Boas</span>
-        </button>
-        <ul className="credit__menu" id="credit-menu" hidden={open !== 'links'}>
+      <button
+        ref={headBtn}
+        className="credit__toggle"
+        type="button"
+        aria-label={c.credits}
+        aria-expanded={view !== null}
+        aria-controls="credit-card"
+        onClick={() => setView((v) => (v ? null : 'menu'))}
+      >
+        <img className="credit__head" src={headImg} alt="" width="216" height="240" loading="lazy" decoding="async" />
+      </button>
+
+      <div className="credit__card" id="credit-card" hidden={view !== 'menu'}>
+        <span className="credit__by">by Bruno Villas Boas</span>
+        <ul className="credit__menu">
           <li>
             <a href={LINKEDIN} target="_blank" rel="noopener author" aria-label={`LinkedIn ${c.newTab}`}>
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.35V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28ZM5.34 7.43a2.06 2.06 0 1 1 0-4.13 2.06 2.06 0 0 1 0 4.13ZM7.12 20.45H3.56V9h3.56v11.45ZM22.22 0H1.77C.79 0 0 .77 0 1.73v20.54C0 23.23.79 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.73V1.73C24 .77 23.2 0 22.22 0Z" /></svg>
@@ -84,30 +103,29 @@ export default function AuthorCredit({ lang = 'pt' }) {
               GitHub
             </a>
           </li>
+          <li>
+            <button ref={inspBtn} className="credit__insp" type="button" aria-controls="inspiration-note" onClick={openNote}>
+              <svg className="inspiration__bulb" viewBox="0 0 24 24" aria-hidden="true">
+                <path className="bulb-glass" d="M12 2.5a6.5 6.5 0 0 0-3.9 11.7c.6.5.9 1.1.9 1.8V17h6v-1c0-.7.3-1.3.9-1.8A6.5 6.5 0 0 0 12 2.5Z" />
+                <path className="bulb-base" d="M9 18.5h6M9.8 21h4.4" />
+              </svg>
+              {c.inspiration}
+            </button>
+          </li>
         </ul>
       </div>
-      <div className="credit__item">
-        <button
-          ref={inspBtn}
-          className="inspiration__toggle"
-          type="button"
-          aria-expanded={open === 'inspiration'}
-          aria-controls="inspiration-note"
-          onClick={() => toggle('inspiration')}
-        >
-          <svg className="inspiration__bulb" viewBox="0 0 24 24" aria-hidden="true">
-            <path className="bulb-glass" d="M12 2.5a6.5 6.5 0 0 0-3.9 11.7c.6.5.9 1.1.9 1.8V17h6v-1c0-.7.3-1.3.9-1.8A6.5 6.5 0 0 0 12 2.5Z" />
-            <path className="bulb-base" d="M9 18.5h6M9.8 21h4.4" />
-          </svg>
-          {c.inspiration}
-        </button>
-        <div className="inspiration__note" id="inspiration-note" role="note" hidden={open !== 'inspiration'}>
+
+      <div className="inspiration__note" id="inspiration-note" role="note" hidden={view !== 'note'}>
+        <div className="inspiration__top">
           <span className="inspiration__eyebrow">{c.eyebrow}</span>
-          {c.note.map((p) => (
-            <p key={p}>{p}</p>
-          ))}
-          <span className="inspiration__sign">Bruno</span>
+          <button ref={backBtn} className="inspiration__back" type="button" onClick={backToMenu}>
+            ← {c.back}
+          </button>
         </div>
+        {c.note.map((p) => (
+          <p key={p}>{p}</p>
+        ))}
+        <span className="inspiration__sign">Bruno</span>
       </div>
     </div>
   );
